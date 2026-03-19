@@ -6,7 +6,7 @@ import {
   generateScenarioProjections,
   updateHypothesisStatus,
 } from "@/app/(dashboard)/clients/[clientId]/insights/actions";
-import { ScenarioChart } from "@/components/insights/scenario-chart";
+import { ScenarioScorecard } from "@/components/insights/scenario-scorecard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -119,7 +119,7 @@ export function InsightsView({
       </div>
 
       {/* Scenario Projections Chart */}
-      {scenarioProjections && <ScenarioChart data={scenarioProjections} />}
+      {scenarioProjections && <ScenarioScorecard data={scenarioProjections} clientId={clientId} />}
 
       {initialDrivers.length === 0 ? (
         <Card>

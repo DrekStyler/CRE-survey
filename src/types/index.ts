@@ -44,6 +44,11 @@ export interface YearProjection {
   operationalCost?: number;   // utilities, maintenance, insurance, parking, IT, etc.
   cost: number;               // total: leaseCost + operationalCost (kept for backward compat)
   netProfit: number;
+  sources?: {
+    revenue?: string;           // "broker_interview" | "research" | "ai" | "user"
+    leaseCost?: string;
+    operationalCost?: string;
+  };
 }
 
 export interface ScenarioDetail {

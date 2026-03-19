@@ -267,6 +267,46 @@ function parseAiProjectionResponse(text: string) {
   return parsed;
 }
 
+export async function updateScenarioProjections(
+  clientId: string,
+  data: StoredProjectionData
+) {
+  const { userId } = await auth();
+  if (!userId) throw new Error("Unauthorized");
+
+  // Re-enforce cost invariants before saving
+  function enforceInvariants(scenarios: ScenarioProjectionData["scenarios"]) {
+    for (const key of ["npvOptimized", "costOptimized", "ebitdaOptimized"] as const) {
+      const scenario = scenarios[key];
+      if (!scenario?.yearlyProjections) continue;
+      for (const yr of scenario.yearlyProjections) {
+        if (yr.leaseCost != null && yr.operationalCost != null) {
+          yr.cost = yr.leaseCost + yr.operationalCost;
+        }
+        yr.netProfit = yr.revenue - yr.cost;
+      }
+    }
+  }
+
+  if ("version" in data && data.version === 2) {
+    for (const loc of data.locations) {
+      enforceInvariants(loc.scenarios);
+    }
+  } else {
+    enforceInvariants((data as ScenarioProjectionData).scenarios);
+  }
+
+  await db
+    .update(clients)
+    .set({
+      scenarioProjections: JSON.stringify(data),
+      updatedAt: new Date(),
+    })
+    .where(eq(clients.id, clientId));
+
+  revalidatePath(`/clients/${clientId}/insights`);
+}
+
 export async function generateScenarioProjections(clientId: string) {
   const { userId } = await auth();
   if (!userId) throw new Error("Unauthorized");

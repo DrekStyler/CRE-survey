@@ -48,7 +48,14 @@ You MUST respond with valid JSON matching this EXACT structure:
       "idealSqft": number,
       "leaseTerm": number,
       "yearlyProjections": [
-        { "year": 1, "revenue": number, "leaseCost": number, "operationalCost": number, "cost": number, "netProfit": number },
+        {
+          "year": 1, "revenue": number, "leaseCost": number, "operationalCost": number, "cost": number, "netProfit": number,
+          "sources": {
+            "revenue": "broker_interview | research | ai",
+            "leaseCost": "broker_interview | research | ai",
+            "operationalCost": "broker_interview | research | ai"
+          }
+        },
         ...
       ]
     },
@@ -100,6 +107,7 @@ RULES:
 - Apply reasonable annual escalations (2-4% rent, variable revenue growth)
 - confidence: 0-100 integer based on how much real data you have vs assumptions
 - If data is sparse, make reasonable assumptions but lower confidence accordingly
+- For each metric in yearlyProjections, include a "sources" object indicating whether the value is primarily derived from "broker_interview" (broker interview data), "research" (research findings), or "ai" (AI estimation). All scenarios must include sources per year.
 
 OPERATIONAL COST SOURCING:
 - If the broker interview summary contains specific operational cost data (e.g., "$X/sqft OpEx", utility costs, maintenance budgets), use those values directly
@@ -194,7 +202,14 @@ You MUST respond with valid JSON matching this EXACT structure:
       "idealSqft": number,
       "leaseTerm": number,
       "yearlyProjections": [
-        { "year": 1, "revenue": number, "leaseCost": number, "operationalCost": number, "cost": number, "netProfit": number },
+        {
+          "year": 1, "revenue": number, "leaseCost": number, "operationalCost": number, "cost": number, "netProfit": number,
+          "sources": {
+            "revenue": "broker_interview | research | ai",
+            "leaseCost": "broker_interview | research | ai",
+            "operationalCost": "broker_interview | research | ai"
+          }
+        },
         ...
       ]
     },
@@ -248,6 +263,7 @@ RULES:
 - Use realistic CRE market assumptions for ${location.city || "the"} market
 - Apply reasonable annual escalations (2-4% rent, variable revenue growth)
 - confidence: 0-100 integer based on how much real data you have vs assumptions
+- For each metric in yearlyProjections, include a "sources" object indicating whether the value is primarily derived from "broker_interview" (broker interview data), "research" (research findings), or "ai" (AI estimation). All scenarios must include sources per year.
 
 OPERATIONAL COST SOURCING:
 - If the broker interview summary contains specific operational cost data (e.g., "$X/sqft OpEx", utility costs, maintenance budgets), use those values directly
