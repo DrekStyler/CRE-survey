@@ -77,6 +77,12 @@ export interface ScenarioProjectionData {
     employeeCountReasoning?: string;
     annualGrowthRate: number;
     annualGrowthRateReasoning?: string;
+    revenuePerEmployee: number | null;
+    revenuePerEmployeeReasoning?: string;
+    opexPerSqft: number | null;
+    opexPerSqftReasoning?: string;
+    densityFactor: number | null;
+    densityFactorReasoning?: string;
     assumptionSources?: AssumptionSource[];
   };
   scenarios: {

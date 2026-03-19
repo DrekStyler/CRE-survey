@@ -25,6 +25,14 @@
 - [ ] Vercel deployment configuration
 - [ ] Error boundary components for AI failure states
 
+## Headcount-Driven Revenue Model (Completed)
+
+Revenue no longer scales linearly with square footage. Instead:
+- Revenue = `min(targetHeadcount, sqft/densityFactor) × revenuePerEmployee`
+- Costs = `sqft × marketRentPsf` and `sqft × opexPerSqft`
+- New assumption fields: Revenue/Employee, OpEx/SF, Density Factor
+- Files: `recalculate.ts` (engine), `scenario-scorecard.tsx` (UI), `scenario-projection.ts` (prompts), `actions.ts` (compat)
+
 ## Future Scope (Post-POC)
 
 - [ ] Phase 7+: Scenario analysis (3 scenarios: EBITDA, NPV, Cost optimization)

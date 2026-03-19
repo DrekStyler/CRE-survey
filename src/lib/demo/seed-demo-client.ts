@@ -472,6 +472,15 @@ function buildDemoProjections(): ScenarioProjectionData {
       annualGrowthRate: 0.065,
       annualGrowthRateReasoning:
         "Blended rate: 5-8% annual headcount growth per broker input, aligned with Larimer County's 15% decade population growth concentrated in family demographics. Conservative midpoint of 6.5%.",
+      revenuePerEmployee: 52000,
+      revenuePerEmployeeReasoning:
+        "Based on healthcare clinic revenue per staff member: ~$52K/employee/year attributable to office space at full productivity.",
+      opexPerSqft: 24,
+      opexPerSqftReasoning:
+        "Healthcare/biotech benchmark $20-30/sqft/year, Fort Collins secondary market adjustment. $24/sqft steady-state.",
+      densityFactor: 375,
+      densityFactorReasoning:
+        "Higher density than standard office due to clinical space requirements including imaging, procedure rooms, and shared clinical areas. 375 sqft/person.",
       assumptionSources: [
         {
           assumption: "Current Sqft",

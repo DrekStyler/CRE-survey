@@ -28,6 +28,7 @@ import type {
   MultiLocationProjectionData,
   LocationProjection,
 } from "@/types";
+import { deriveAssumptions } from "@/lib/projections/recalculate";
 
 export async function getDrivers(clientId: string) {
   const { userId } = await auth();
@@ -232,7 +233,20 @@ export async function getScenarioProjections(
   if (!client?.scenarioProjections) return null;
 
   try {
-    return JSON.parse(client.scenarioProjections) as StoredProjectionData;
+    const data = JSON.parse(client.scenarioProjections) as StoredProjectionData;
+
+    // Derive missing assumption fields (revenuePerEmployee, opexPerSqft, densityFactor)
+    // for saved data that predates the headcount-driven revenue model
+    if ("version" in data && data.version === 2) {
+      for (const loc of data.locations) {
+        loc.assumptions = deriveAssumptions(loc.assumptions, loc.scenarios);
+      }
+    } else {
+      const legacy = data as ScenarioProjectionData;
+      legacy.assumptions = deriveAssumptions(legacy.assumptions, legacy.scenarios);
+    }
+
+    return data;
   } catch {
     return null;
   }
@@ -262,6 +276,11 @@ function parseAiProjectionResponse(text: string) {
         yr.netProfit = yr.revenue - yr.cost;
       }
     }
+  }
+
+  // Derive per-unit rate assumptions if AI omitted them
+  if (parsed.assumptions && parsed.scenarios) {
+    parsed.assumptions = deriveAssumptions(parsed.assumptions, parsed.scenarios);
   }
 
   return parsed;

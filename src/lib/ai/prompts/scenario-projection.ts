@@ -36,6 +36,12 @@ You MUST respond with valid JSON matching this EXACT structure:
     "employeeCountReasoning": "string - how you derived the office headcount",
     "annualGrowthRate": number,
     "annualGrowthRateReasoning": "string - basis for growth rate assumption",
+    "revenuePerEmployee": number | null,
+    "revenuePerEmployeeReasoning": "string - annual revenue attributable per office employee at full productivity",
+    "opexPerSqft": number | null,
+    "opexPerSqftReasoning": "string - steady-state operational cost per sqft per year (excluding ramp-up)",
+    "densityFactor": number | null,
+    "densityFactorReasoning": "string - sqft per employee, typically 150-250",
     "assumptionSources": [
       { "assumption": "string - assumption name", "source": "string - data source", "detail": "string - specific data point or reasoning" }
     ]
@@ -108,6 +114,14 @@ RULES:
 - confidence: 0-100 integer based on how much real data you have vs assumptions
 - If data is sparse, make reasonable assumptions but lower confidence accordingly
 - For each metric in yearlyProjections, include a "sources" object indicating whether the value is primarily derived from "broker_interview" (broker interview data), "research" (research findings), or "ai" (AI estimation). All scenarios must include sources per year.
+
+PER-UNIT RATE ASSUMPTIONS (CRITICAL for edit-time recalculation):
+- revenuePerEmployee = Year 2 revenue / employeeCount (full-run-rate year, excluding Year 1 ramp)
+- opexPerSqft = Year 3+ operationalCost / idealSqft (steady-state, excluding ramp-up years)
+- densityFactor = idealSqft / employeeCount (or use 150-250 industry range)
+- These per-unit rates are used for recalculation when users edit space size or headcount
+- Revenue is driven by headcount, NOT by square footage — more space does not linearly increase revenue
+- Space sets a CAPACITY CEILING: effectiveHeadcount = min(targetHeadcount, idealSqft / densityFactor)
 
 OPERATIONAL COST SOURCING:
 - If the broker interview summary contains specific operational cost data (e.g., "$X/sqft OpEx", utility costs, maintenance budgets), use those values directly
@@ -190,6 +204,12 @@ You MUST respond with valid JSON matching this EXACT structure:
     "employeeCountReasoning": "string - how you derived the location headcount",
     "annualGrowthRate": number,
     "annualGrowthRateReasoning": "string - basis for growth rate assumption",
+    "revenuePerEmployee": number | null,
+    "revenuePerEmployeeReasoning": "string - annual revenue attributable per office employee at full productivity",
+    "opexPerSqft": number | null,
+    "opexPerSqftReasoning": "string - steady-state operational cost per sqft per year (excluding ramp-up)",
+    "densityFactor": number | null,
+    "densityFactorReasoning": "string - sqft per employee, typically 150-250",
     "assumptionSources": [
       { "assumption": "string - assumption name", "source": "string - data source", "detail": "string - specific data point or reasoning" }
     ]
@@ -264,6 +284,14 @@ RULES:
 - Apply reasonable annual escalations (2-4% rent, variable revenue growth)
 - confidence: 0-100 integer based on how much real data you have vs assumptions
 - For each metric in yearlyProjections, include a "sources" object indicating whether the value is primarily derived from "broker_interview" (broker interview data), "research" (research findings), or "ai" (AI estimation). All scenarios must include sources per year.
+
+PER-UNIT RATE ASSUMPTIONS (CRITICAL for edit-time recalculation):
+- revenuePerEmployee = Year 2 revenue / employeeCount (full-run-rate year, excluding Year 1 ramp)
+- opexPerSqft = Year 3+ operationalCost / idealSqft (steady-state, excluding ramp-up years)
+- densityFactor = idealSqft / employeeCount (or use 150-250 industry range)
+- These per-unit rates are used for recalculation when users edit space size or headcount
+- Revenue is driven by headcount, NOT by square footage — more space does not linearly increase revenue
+- Space sets a CAPACITY CEILING: effectiveHeadcount = min(targetHeadcount, idealSqft / densityFactor)
 
 OPERATIONAL COST SOURCING:
 - If the broker interview summary contains specific operational cost data (e.g., "$X/sqft OpEx", utility costs, maintenance budgets), use those values directly

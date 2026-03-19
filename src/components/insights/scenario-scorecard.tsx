@@ -21,8 +21,15 @@ import type {
   ScenarioProjectionData,
   MultiLocationProjectionData,
   LocationProjection,
-  YearProjection,
 } from "@/types";
+import {
+  deriveAssumptions,
+  recalculateFromSqftChange,
+  recalculateFromAssumptionChange,
+  recalculateAll,
+  type RecalcField,
+  type Assumptions,
+} from "@/lib/projections/recalculate";
 
 type ScenarioKey = "npvOptimized" | "costOptimized" | "ebitdaOptimized";
 type EditableMetric = "revenue" | "leaseCost" | "operationalCost";
@@ -196,9 +203,15 @@ interface ScenarioScorecardProps {
 }
 
 export function ScenarioScorecard({ data: initialData, clientId }: ScenarioScorecardProps) {
-  const [editableData, setEditableData] = useState<StoredProjectionData>(() =>
-    cloneData(initialData)
-  );
+  const [editableData, setEditableData] = useState<StoredProjectionData>(() => {
+    const cloned = cloneData(initialData);
+    // Derive missing assumption fields (revenuePerEmployee, opexPerSqft, densityFactor)
+    const locs = normalizeToLocations(cloned);
+    for (const loc of locs) {
+      loc.assumptions = deriveAssumptions(loc.assumptions, loc.scenarios);
+    }
+    return rebuildFromLocations(cloned, locs);
+  });
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -344,61 +357,6 @@ export function ScenarioScorecard({ data: initialData, clientId }: ScenarioScore
     });
   }
 
-  // Scale all yearly projections proportionally and recalculate derived values
-  function scaleProjections(
-    scenario: { yearlyProjections: YearProjection[] },
-    fields: { revenue?: number; leaseCost?: number; operationalCost?: number }
-  ) {
-    for (const yr of scenario.yearlyProjections) {
-      if (fields.revenue != null) {
-        yr.revenue = Math.round(yr.revenue * fields.revenue);
-        if (!yr.sources) yr.sources = {};
-        yr.sources.revenue = "user";
-      }
-      if (fields.leaseCost != null && yr.leaseCost != null) {
-        yr.leaseCost = Math.round(yr.leaseCost * fields.leaseCost);
-        if (!yr.sources) yr.sources = {};
-        yr.sources.leaseCost = "user";
-      }
-      if (fields.operationalCost != null && yr.operationalCost != null) {
-        yr.operationalCost = Math.round(yr.operationalCost * fields.operationalCost);
-        if (!yr.sources) yr.sources = {};
-        yr.sources.operationalCost = "user";
-      }
-      // Recalculate derived
-      if (yr.leaseCost != null && yr.operationalCost != null) {
-        yr.cost = yr.leaseCost + yr.operationalCost;
-      }
-      yr.netProfit = yr.revenue - yr.cost;
-    }
-  }
-
-  // Recompute yearly growth from year 1 base using a new growth rate
-  function reapplyGrowthRate(
-    scenario: { yearlyProjections: YearProjection[] },
-    newRate: number
-  ) {
-    const p = scenario.yearlyProjections;
-    if (p.length < 2) return;
-    const base = p[0];
-    for (let i = 1; i < p.length; i++) {
-      const factor = Math.pow(1 + newRate, i);
-      p[i].revenue = Math.round(base.revenue * factor);
-      if (base.leaseCost != null && p[i].leaseCost != null) {
-        p[i].leaseCost = Math.round(base.leaseCost * Math.pow(1.03, i));
-      }
-      if (base.operationalCost != null && p[i].operationalCost != null) {
-        p[i].operationalCost = Math.round(base.operationalCost * Math.pow(1.03, i));
-      }
-      if (p[i].leaseCost != null && p[i].operationalCost != null) {
-        p[i].cost = p[i].leaseCost! + p[i].operationalCost!;
-      }
-      p[i].netProfit = p[i].revenue - p[i].cost;
-      if (!p[i].sources) p[i].sources = {};
-      p[i].sources!.revenue = "user";
-    }
-  }
-
   function handleScenarioParamChange(
     scenarioKey: ScenarioKey,
     param: "idealSqft" | "leaseTerm",
@@ -411,44 +369,35 @@ export function ScenarioScorecard({ data: initialData, clientId }: ScenarioScore
       const scenario = loc.scenarios[scenarioKey];
 
       if (param === "idealSqft") {
-        const oldSqft = scenario.idealSqft;
         const newSqft = Math.round(value);
-        if (oldSqft > 0 && newSqft !== oldSqft) {
-          const ratio = newSqft / oldSqft;
-          // Scale all sqft-dependent metrics proportionally
-          scaleProjections(scenario, {
-            revenue: ratio,
-            leaseCost: ratio,
-            operationalCost: ratio,
-          });
-        }
-        scenario.idealSqft = newSqft;
+        // Recalculate costs from rates and cap revenue by space capacity
+        loc.scenarios[scenarioKey] = recalculateFromSqftChange(
+          scenario,
+          newSqft,
+          loc.assumptions
+        );
       } else if (param === "leaseTerm") {
         const newTerm = Math.round(value);
         const oldTerm = scenario.yearlyProjections.length;
 
         if (newTerm > oldTerm) {
-          const lastYear = scenario.yearlyProjections[oldTerm - 1];
-          const growthRate = loc.assumptions.annualGrowthRate || 0.03;
+          // Extend: add placeholder years then recalculate from rates
           for (let i = oldTerm; i < newTerm; i++) {
-            const factor = 1 + growthRate;
-            const newYr: YearProjection = {
+            scenario.yearlyProjections.push({
               year: i + 1,
-              revenue: Math.round(lastYear.revenue * Math.pow(factor, i - oldTerm + 1)),
-              leaseCost: lastYear.leaseCost != null
-                ? Math.round(lastYear.leaseCost * Math.pow(1.03, i - oldTerm + 1))
-                : undefined,
-              operationalCost: lastYear.operationalCost != null
-                ? Math.round(lastYear.operationalCost * Math.pow(1.03, i - oldTerm + 1))
-                : undefined,
+              revenue: 0,
+              leaseCost: 0,
+              operationalCost: 0,
               cost: 0,
               netProfit: 0,
               sources: { revenue: "user", leaseCost: "user", operationalCost: "user" },
-            };
-            newYr.cost = (newYr.leaseCost ?? 0) + (newYr.operationalCost ?? 0);
-            newYr.netProfit = newYr.revenue - newYr.cost;
-            scenario.yearlyProjections.push(newYr);
+            });
           }
+          scenario.yearlyProjections = recalculateAll(
+            scenario.yearlyProjections,
+            scenario.idealSqft,
+            loc.assumptions
+          );
         } else if (newTerm < oldTerm && newTerm >= 1) {
           scenario.yearlyProjections = scenario.yearlyProjections.slice(0, newTerm);
         }
@@ -461,47 +410,56 @@ export function ScenarioScorecard({ data: initialData, clientId }: ScenarioScore
     });
   }
 
-  function handleAssumptionChange(
-    field: "currentSqft" | "marketRentPsf" | "employeeCount" | "annualGrowthRate",
-    value: number
-  ) {
+  type AssumptionField =
+    | "currentSqft"
+    | "marketRentPsf"
+    | "employeeCount"
+    | "annualGrowthRate"
+    | "revenuePerEmployee"
+    | "opexPerSqft"
+    | "densityFactor";
+
+  function handleAssumptionChange(field: AssumptionField, value: number) {
     setEditableData((prev) => {
       const next = cloneData(prev);
       const nextLocations = normalizeToLocations(next);
       const loc = nextLocations[selectedLocationIdx];
 
-      const oldAssumptions = { ...loc.assumptions };
-
+      // Update the assumption value
       if (field === "currentSqft") loc.assumptions.currentSqft = value;
       else if (field === "marketRentPsf") loc.assumptions.marketRentPsf = value;
       else if (field === "employeeCount") loc.assumptions.employeeCount = value;
       else if (field === "annualGrowthRate") loc.assumptions.annualGrowthRate = value;
+      else if (field === "revenuePerEmployee") loc.assumptions.revenuePerEmployee = value;
+      else if (field === "opexPerSqft") loc.assumptions.opexPerSqft = value;
+      else if (field === "densityFactor") loc.assumptions.densityFactor = value;
 
-      // Cascade assumption changes to all scenarios
-      for (const key of ["npvOptimized", "costOptimized", "ebitdaOptimized"] as const) {
-        const scenario = loc.scenarios[key];
-        if (!scenario) continue;
-
-        if (field === "marketRentPsf" && oldAssumptions.marketRentPsf && oldAssumptions.marketRentPsf > 0) {
-          // Market rent directly affects lease cost
-          const ratio = value / oldAssumptions.marketRentPsf;
-          scaleProjections(scenario, { leaseCost: ratio });
-        } else if (field === "employeeCount" && oldAssumptions.employeeCount && oldAssumptions.employeeCount > 0) {
-          // Employee count affects revenue (more people = more productivity/patients)
-          const ratio = value / oldAssumptions.employeeCount;
-          scaleProjections(scenario, { revenue: ratio });
-        } else if (field === "annualGrowthRate") {
-          // Growth rate recomputes the escalation curve from year 1
-          reapplyGrowthRate(scenario, value);
+      // Cascade to all scenarios using rate-based recalculation
+      const recalcFields: RecalcField[] = [
+        "marketRentPsf", "opexPerSqft", "employeeCount",
+        "revenuePerEmployee", "densityFactor", "annualGrowthRate",
+      ];
+      if (recalcFields.includes(field as RecalcField)) {
+        for (const key of ["npvOptimized", "costOptimized", "ebitdaOptimized"] as const) {
+          if (!loc.scenarios[key]) continue;
+          loc.scenarios[key] = recalculateFromAssumptionChange(
+            loc.scenarios[key],
+            field as RecalcField,
+            loc.assumptions
+          );
         }
-        // currentSqft is informational — idealSqft on each scenario drives the actual scaling
       }
+      // currentSqft is informational — idealSqft on each scenario drives the actual calculation
 
+      // Track source
       const fieldLabels: Record<string, string> = {
         currentSqft: "Current Sqft",
         marketRentPsf: "Market Rent PSF",
         employeeCount: "Employee Count",
         annualGrowthRate: "Annual Growth Rate",
+        revenuePerEmployee: "Revenue / Employee",
+        opexPerSqft: "OpEx / SF",
+        densityFactor: "Density Factor",
       };
       if (!loc.assumptions.assumptionSources) {
         loc.assumptions.assumptionSources = [];
@@ -688,6 +646,23 @@ export function ScenarioScorecard({ data: initialData, clientId }: ScenarioScore
                   </TableCell>
                 ))}
               </TableRow>
+              {/* Space capacity row — shows whether headcount is constrained */}
+              {assumptions.densityFactor != null && assumptions.densityFactor > 0 && assumptions.employeeCount != null && (
+                <TableRow>
+                  <TableCell className="text-xs text-muted-foreground">Space Capacity</TableCell>
+                  {activeKeys.map((key) => {
+                    const capacity = Math.floor(scenarios[key].idealSqft / (assumptions.densityFactor ?? 200));
+                    const headcount = assumptions.employeeCount ?? 0;
+                    const constrained = capacity < headcount;
+                    return (
+                      <TableCell key={key} className={`text-center text-xs tabular-nums ${constrained ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`}>
+                        {capacity.toLocaleString()} people
+                        {constrained && " (constrained)"}
+                      </TableCell>
+                    );
+                  })}
+                </TableRow>
+              )}
 
               {/* Financial Summary */}
               <TableRow className="border-t bg-muted/10">
@@ -859,16 +834,22 @@ function LinkedOriginPill({
 }
 
 // --- Assumptions Panel ---
+type AssumptionFieldKey =
+  | "currentSqft"
+  | "marketRentPsf"
+  | "employeeCount"
+  | "annualGrowthRate"
+  | "revenuePerEmployee"
+  | "opexPerSqft"
+  | "densityFactor";
+
 function AssumptionsPanel({
   assumptions,
   onAssumptionChange,
   clientId,
 }: {
   assumptions: ScenarioProjectionData["assumptions"];
-  onAssumptionChange: (
-    field: "currentSqft" | "marketRentPsf" | "employeeCount" | "annualGrowthRate",
-    value: number
-  ) => void;
+  onAssumptionChange: (field: AssumptionFieldKey, value: number) => void;
   clientId: string;
 }) {
   const hasReasoning =
@@ -880,7 +861,13 @@ function AssumptionsPanel({
   const hasSources =
     assumptions.assumptionSources && assumptions.assumptionSources.length > 0;
 
-  if (!hasReasoning && !hasSources) return null;
+  // Always show the panel since new assumption fields are always useful
+  const hasAnyData = hasReasoning || hasSources ||
+    assumptions.revenuePerEmployee != null ||
+    assumptions.opexPerSqft != null ||
+    assumptions.densityFactor != null;
+
+  if (!hasAnyData) return null;
 
   function getSource(label: string): string | undefined {
     return assumptions.assumptionSources?.find(
@@ -890,7 +877,7 @@ function AssumptionsPanel({
 
   const rows: {
     label: string;
-    field: "currentSqft" | "marketRentPsf" | "employeeCount" | "annualGrowthRate";
+    field: AssumptionFieldKey;
     value: number | null;
     displayValue: string;
     format: (v: number) => string;
@@ -932,6 +919,33 @@ function AssumptionsPanel({
       format: (v) => `${(v * 100).toFixed(1)}%`,
       reasoning: assumptions.annualGrowthRateReasoning,
       source: getSource("growth"),
+    },
+    {
+      label: "Revenue / Employee",
+      field: "revenuePerEmployee",
+      value: assumptions.revenuePerEmployee ?? null,
+      displayValue: assumptions.revenuePerEmployee != null ? `$${assumptions.revenuePerEmployee.toLocaleString()}` : "Unknown",
+      format: (v) => `$${v.toLocaleString()}`,
+      reasoning: assumptions.revenuePerEmployeeReasoning,
+      source: getSource("revenue"),
+    },
+    {
+      label: "OpEx / SF",
+      field: "opexPerSqft",
+      value: assumptions.opexPerSqft ?? null,
+      displayValue: assumptions.opexPerSqft != null ? `$${assumptions.opexPerSqft}` : "Unknown",
+      format: (v) => `$${v}`,
+      reasoning: assumptions.opexPerSqftReasoning,
+      source: getSource("opex"),
+    },
+    {
+      label: "Density (SF/Employee)",
+      field: "densityFactor",
+      value: assumptions.densityFactor ?? null,
+      displayValue: assumptions.densityFactor != null ? `${assumptions.densityFactor} SF` : "Unknown",
+      format: (v) => `${v} SF`,
+      reasoning: assumptions.densityFactorReasoning,
+      source: getSource("density"),
     },
   ];
 
