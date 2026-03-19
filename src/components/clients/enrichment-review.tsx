@@ -8,6 +8,7 @@ import { Loader2, Sparkles, Check, RotateCcw } from "lucide-react";
 import { updateClient } from "@/app/(dashboard)/clients/actions";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { CollapsibleSection } from "@/components/ui/citation-badge";
 import type { Client } from "@/lib/db/schema/clients";
 
 interface EnrichmentReviewProps {
@@ -24,6 +25,13 @@ interface EnrichmentData {
   description?: string;
   keyFacts?: string[];
   confidence?: number;
+  citations?: {
+    industry?: string;
+    hqAddress?: string;
+    employeeEstimate?: string;
+    description?: string;
+  };
+  dataSources?: string[];
 }
 
 export function EnrichmentReview({ client }: EnrichmentReviewProps) {
@@ -134,6 +142,11 @@ export function EnrichmentReview({ client }: EnrichmentReviewProps) {
               Description
             </p>
             <p className="mt-1 text-sm">{enrichmentData.description}</p>
+            {enrichmentData.citations?.description && (
+              <p className="mt-1 text-xs text-muted-foreground">
+                {enrichmentData.citations.description}
+              </p>
+            )}
           </div>
         )}
 
@@ -152,11 +165,13 @@ export function EnrichmentReview({ client }: EnrichmentReviewProps) {
             label="Industry"
             original={client.industry}
             enriched={enrichmentData.industry}
+            citation={enrichmentData.citations?.industry}
           />
           <EnrichmentField
             label="HQ Location"
             original={client.hqLocation}
             enriched={enrichmentData.hqAddress}
+            citation={enrichmentData.citations?.hqAddress}
           />
           <EnrichmentField
             label="Employees"
@@ -165,6 +180,7 @@ export function EnrichmentReview({ client }: EnrichmentReviewProps) {
               enrichmentData.employeeRange ||
               enrichmentData.employeeEstimate?.toString()
             }
+            citation={enrichmentData.citations?.employeeEstimate}
           />
         </div>
 
@@ -181,6 +197,21 @@ export function EnrichmentReview({ client }: EnrichmentReviewProps) {
               ))}
             </ul>
           </div>
+        )}
+
+        {enrichmentData.dataSources && enrichmentData.dataSources.length > 0 && (
+          <CollapsibleSection title="Data Sources">
+            <div className="flex flex-wrap gap-1.5">
+              {enrichmentData.dataSources.map((source, i) => (
+                <span
+                  key={i}
+                  className="rounded-full border px-2 py-0.5 text-[11px] text-muted-foreground"
+                >
+                  {source}
+                </span>
+              ))}
+            </div>
+          </CollapsibleSection>
         )}
 
         {!client.confirmedByBroker && (
@@ -212,10 +243,12 @@ function EnrichmentField({
   label,
   original,
   enriched,
+  citation,
 }: {
   label: string;
   original?: string | null;
   enriched?: string | null;
+  citation?: string;
 }) {
   const hasChange = enriched && enriched !== original;
 
@@ -234,6 +267,9 @@ function EnrichmentField({
           <p className="text-sm">{original || enriched || "Not set"}</p>
         )}
       </div>
+      {citation && (
+        <p className="mt-1.5 text-[11px] text-muted-foreground">{citation}</p>
+      )}
     </div>
   );
 }

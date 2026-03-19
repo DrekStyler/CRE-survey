@@ -29,14 +29,22 @@ You MUST respond with valid JSON matching this EXACT structure:
 {
   "assumptions": {
     "currentSqft": number | null,
+    "currentSqftReasoning": "string - why you chose this value or null",
     "marketRentPsf": number | null,
+    "marketRentPsfReasoning": "string - source/reasoning for market rent estimate",
     "employeeCount": number | null,
-    "annualGrowthRate": number
+    "employeeCountReasoning": "string - how you derived the office headcount",
+    "annualGrowthRate": number,
+    "annualGrowthRateReasoning": "string - basis for growth rate assumption",
+    "assumptionSources": [
+      { "assumption": "string - assumption name", "source": "string - data source", "detail": "string - specific data point or reasoning" }
+    ]
   },
   "scenarios": {
     "npvOptimized": {
       "label": "NPV Optimized",
       "description": "string - 1-2 sentence explanation of this scenario's strategy",
+      "reasoning": "string - detailed explanation of why this scenario produces the best NPV, key trade-offs made",
       "idealSqft": number,
       "leaseTerm": number,
       "yearlyProjections": [
@@ -47,6 +55,7 @@ You MUST respond with valid JSON matching this EXACT structure:
     "costOptimized": {
       "label": "Cost Optimized",
       "description": "string",
+      "reasoning": "string - detailed explanation of cost minimization strategy and trade-offs",
       "idealSqft": number,
       "leaseTerm": number,
       "yearlyProjections": [...]
@@ -54,6 +63,7 @@ You MUST respond with valid JSON matching this EXACT structure:
     "ebitdaOptimized": {
       "label": "EBITDA Optimized",
       "description": "string",
+      "reasoning": "string - detailed explanation of EBITDA optimization approach and trade-offs",
       "idealSqft": number,
       "leaseTerm": number,
       "yearlyProjections": [...]
@@ -165,14 +175,22 @@ You MUST respond with valid JSON matching this EXACT structure:
 {
   "assumptions": {
     "currentSqft": number | null,
+    "currentSqftReasoning": "string - why you chose this value or null",
     "marketRentPsf": number | null,
+    "marketRentPsfReasoning": "string - source/reasoning for market rent estimate",
     "employeeCount": number | null,
-    "annualGrowthRate": number
+    "employeeCountReasoning": "string - how you derived the location headcount",
+    "annualGrowthRate": number,
+    "annualGrowthRateReasoning": "string - basis for growth rate assumption",
+    "assumptionSources": [
+      { "assumption": "string - assumption name", "source": "string - data source", "detail": "string - specific data point or reasoning" }
+    ]
   },
   "scenarios": {
     "npvOptimized": {
       "label": "NPV Optimized",
       "description": "string - 1-2 sentence explanation of this scenario's strategy for this location",
+      "reasoning": "string - detailed explanation of why this scenario produces the best NPV for this location",
       "idealSqft": number,
       "leaseTerm": number,
       "yearlyProjections": [
@@ -183,6 +201,7 @@ You MUST respond with valid JSON matching this EXACT structure:
     "costOptimized": {
       "label": "Cost Optimized",
       "description": "string",
+      "reasoning": "string - detailed explanation of cost minimization strategy",
       "idealSqft": number,
       "leaseTerm": number,
       "yearlyProjections": [...]
@@ -190,6 +209,7 @@ You MUST respond with valid JSON matching this EXACT structure:
     "ebitdaOptimized": {
       "label": "EBITDA Optimized",
       "description": "string",
+      "reasoning": "string - detailed explanation of EBITDA optimization approach",
       "idealSqft": number,
       "leaseTerm": number,
       "yearlyProjections": [...]

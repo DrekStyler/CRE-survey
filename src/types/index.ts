@@ -49,18 +49,30 @@ export interface YearProjection {
 export interface ScenarioDetail {
   label: string;
   description: string;
+  reasoning?: string;
   idealSqft: number;
   leaseTerm: number;
   yearlyProjections: YearProjection[];
+}
+
+export interface AssumptionSource {
+  assumption: string;
+  source: string;
+  detail: string;
 }
 
 export interface ScenarioProjectionData {
   generatedAt: string;
   assumptions: {
     currentSqft: number | null;
+    currentSqftReasoning?: string;
     marketRentPsf: number | null;
+    marketRentPsfReasoning?: string;
     employeeCount: number | null;
+    employeeCountReasoning?: string;
     annualGrowthRate: number;
+    annualGrowthRateReasoning?: string;
+    assumptionSources?: AssumptionSource[];
   };
   scenarios: {
     npvOptimized: ScenarioDetail;

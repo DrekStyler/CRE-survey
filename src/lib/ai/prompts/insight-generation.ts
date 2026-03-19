@@ -3,7 +3,7 @@ import type { Client } from "@/lib/db/schema/clients";
 export function buildInsightGenerationPrompt(
   client: Client,
   brokerInterviewSummary: string,
-  researchFindings: string[],
+  researchFindings: { id: string; text: string }[] | string[],
   interviewResponses: string[],
   hypotheses: string[]
 ) {
@@ -21,7 +21,8 @@ You MUST respond with valid JSON matching this structure:
       "supportingEvidence": [
         {
           "source": "string - where this evidence came from (broker interview, research, client interview)",
-          "quote": "string - specific supporting data point or quote"
+          "quote": "string - specific supporting data point or quote",
+          "findingId": "string | null - if evidence comes from a research finding, include its ID from the findings list below"
         }
       ]
     }
@@ -50,7 +51,8 @@ Rules:
 - Impact levels: high = material effect on business outcomes, medium = significant but not critical, low = notable but manageable
 - Dimension scores: 0-25 weak signal, 26-50 moderate, 51-75 strong, 76-100 dominant
 - Be specific and actionable, not generic
-- Connect drivers to hypotheses where relevant`,
+- Connect drivers to hypotheses where relevant
+- When citing a research finding, include its ID in the findingId field so the UI can link back to the source`,
     user: `Generate comprehensive insight analysis for:
 
 Company: ${client.legalName}
@@ -62,7 +64,7 @@ HQ: ${client.hqLocation || "Unknown"}
 ${brokerInterviewSummary || "No broker interview data"}
 
 === RESEARCH FINDINGS ===
-${researchFindings.length > 0 ? researchFindings.map((f) => `- ${f}`).join("\n") : "No research findings"}
+${researchFindings.length > 0 ? researchFindings.map((f) => typeof f === "string" ? `- ${f}` : `- [${f.id}] ${f.text}`).join("\n") : "No research findings"}
 
 === CLIENT INTERVIEW RESPONSES ===
 ${interviewResponses.length > 0 ? interviewResponses.map((r) => `- ${r}`).join("\n") : "No client interview responses"}

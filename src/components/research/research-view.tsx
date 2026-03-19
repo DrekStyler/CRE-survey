@@ -9,6 +9,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Loader2, Search, ExternalLink } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { OriginPill } from "@/components/ui/citation-badge";
 import type { ResearchFinding } from "@/lib/db/schema/research-findings";
 import type { Hypothesis } from "@/lib/db/schema/hypotheses";
 
@@ -134,6 +135,7 @@ export function ResearchView({
                   <div className="flex-1">
                     <div className="flex items-center gap-2">
                       <Badge variant="outline">{h.type}</Badge>
+                      {h.source && <OriginPill source={h.source} />}
                       <Badge
                         variant={
                           h.status === "confirmed"
@@ -145,6 +147,11 @@ export function ResearchView({
                       >
                         {h.status}
                       </Badge>
+                      {h.confidenceScore != null && (
+                        <Badge variant={confidenceColor(h.confidenceScore) as "default" | "secondary" | "outline" | "destructive"}>
+                          {h.confidenceScore}%
+                        </Badge>
+                      )}
                     </div>
                     <p className="mt-2 text-sm">{h.statement}</p>
                     {h.scoringReasoning && (

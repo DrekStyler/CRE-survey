@@ -18,14 +18,23 @@ You MUST respond with valid JSON matching this exact structure:
   "employeeRange": "string - e.g. 1,000-5,000",
   "description": "string - 2-3 sentence company description",
   "keyFacts": ["string array of 3-5 relevant facts for CRE analysis"],
-  "confidence": number between 0-100
+  "confidence": number between 0-100,
+  "citations": {
+    "industry": "string - reasoning/source for industry classification",
+    "hqAddress": "string - reasoning/source for HQ address",
+    "employeeEstimate": "string - reasoning/source for employee count",
+    "description": "string - key sources informing the description"
+  },
+  "dataSources": ["string array - types of sources used, e.g. 'SEC filings', 'company website', 'LinkedIn', 'press releases', 'industry databases'"]
 }
 
 Rules:
 - Only include information you are confident about
 - Set confidence score based on how well you know this entity
 - If you cannot find reliable information for a field, use null
-- Focus on facts relevant to commercial real estate decisions (space usage, growth, workforce)`,
+- Focus on facts relevant to commercial real estate decisions (space usage, growth, workforce)
+- For each enriched field, provide a brief citation explaining where the information comes from or why you believe it is accurate
+- List all source types you drew from in dataSources`,
     user: `Enrich the following client profile:
 
 Company Name: ${client.legalName}

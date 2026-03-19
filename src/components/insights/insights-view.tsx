@@ -20,8 +20,10 @@ import {
 import { Loader2, Lightbulb, TrendingUp, DollarSign, Cog, MapPin, BarChart3 } from "lucide-react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
+import { SourceLink, OriginPill } from "@/components/ui/citation-badge";
 import type { Driver } from "@/lib/db/schema/drivers";
 import type { Hypothesis } from "@/lib/db/schema/hypotheses";
+import type { ResearchFinding } from "@/lib/db/schema/research-findings";
 import type { SupportingEvidence, StoredProjectionData } from "@/types";
 
 interface InsightsViewProps {
@@ -29,6 +31,7 @@ interface InsightsViewProps {
   drivers: Driver[];
   hypotheses: Hypothesis[];
   scenarioProjections: StoredProjectionData | null;
+  findings?: ResearchFinding[];
 }
 
 const DRIVER_CONFIG = {
@@ -43,7 +46,9 @@ export function InsightsView({
   drivers: initialDrivers,
   hypotheses: initialHypotheses,
   scenarioProjections,
+  findings = [],
 }: InsightsViewProps) {
+  const findingsMap = new Map(findings.map((f) => [f.id, f]));
   const router = useRouter();
   const [isGenerating, setIsGenerating] = useState(false);
   const [isGeneratingProjections, setIsGeneratingProjections] = useState(false);
@@ -170,17 +175,29 @@ export function InsightsView({
                             <div className="mt-2 space-y-1">
                               {(
                                 driver.supportingEvidence as SupportingEvidence[]
-                              ).map((e, i) => (
-                                <div
-                                  key={i}
-                                  className="rounded bg-muted/50 px-2 py-1 text-xs"
-                                >
-                                  <span className="font-medium">
-                                    {e.source}:
-                                  </span>{" "}
-                                  {e.quote}
-                                </div>
-                              ))}
+                              ).map((e, i) => {
+                                const linkedFinding = e.findingId ? findingsMap.get(e.findingId) : null;
+                                return (
+                                  <div
+                                    key={i}
+                                    className="rounded bg-muted/50 px-2 py-1 text-xs"
+                                  >
+                                    {linkedFinding ? (
+                                      <SourceLink
+                                        sourceName={linkedFinding.sourceName || e.source}
+                                        sourceUrl={linkedFinding.sourceUrl}
+                                        confidence={linkedFinding.confidence}
+                                        className="font-medium"
+                                      />
+                                    ) : (
+                                      <span className="font-medium">
+                                        {e.source}:
+                                      </span>
+                                    )}{" "}
+                                    {e.quote}
+                                  </div>
+                                );
+                              })}
                             </div>
                           ) : null}
                         </CardContent>
@@ -210,6 +227,12 @@ export function InsightsView({
                   <div className="flex-1 space-y-2">
                     <div className="flex items-center gap-2">
                       <Badge variant="outline">{h.type}</Badge>
+                      {h.source && <OriginPill source={h.source} />}
+                      {h.confidenceScore != null && (
+                        <Badge variant="secondary" className="text-[10px]">
+                          {h.confidenceScore}%
+                        </Badge>
+                      )}
                       <Select
                         defaultValue={h.status}
                         onValueChange={(value) =>

@@ -13,11 +13,13 @@ import {
 } from "recharts";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Building2, Clock, TrendingUp, MapPin } from "lucide-react";
+import { CollapsibleSection, ReasoningText, OriginPill } from "@/components/ui/citation-badge";
 import type {
   StoredProjectionData,
   ScenarioProjectionData,
   MultiLocationProjectionData,
   LocationProjection,
+  AssumptionSource,
 } from "@/types";
 
 type ScenarioKey = "npvOptimized" | "costOptimized" | "ebitdaOptimized";
@@ -89,7 +91,7 @@ export function ScenarioChart({ data }: ScenarioChartProps) {
   );
 
   const currentLocation = locations[selectedLocationIdx] || locations[0];
-  const { scenarios, confidence } = currentLocation;
+  const { scenarios, confidence, assumptions } = currentLocation;
 
   const bandPct = useMemo(() => (100 - confidence) / 200, [confidence]);
 
@@ -420,12 +422,99 @@ export function ScenarioChart({ data }: ScenarioChartProps) {
                     </div>
                   )}
                 </div>
+                {scenario.reasoning && (
+                  <ReasoningText text={scenario.reasoning} className="mt-3" />
+                )}
               </div>
             );
           })}
         </div>
+
+        {/* Assumptions panel */}
+        <AssumptionsPanel assumptions={assumptions} />
       </CardContent>
     </Card>
+  );
+}
+
+function AssumptionsPanel({
+  assumptions,
+}: {
+  assumptions: ScenarioProjectionData["assumptions"];
+}) {
+  const hasReasoning =
+    assumptions.currentSqftReasoning ||
+    assumptions.marketRentPsfReasoning ||
+    assumptions.employeeCountReasoning ||
+    assumptions.annualGrowthRateReasoning;
+
+  const hasSources =
+    assumptions.assumptionSources && assumptions.assumptionSources.length > 0;
+
+  if (!hasReasoning && !hasSources) return null;
+
+  const rows: { label: string; value: string; reasoning?: string }[] = [
+    {
+      label: "Current Sqft",
+      value: assumptions.currentSqft?.toLocaleString() ?? "Unknown",
+      reasoning: assumptions.currentSqftReasoning,
+    },
+    {
+      label: "Market Rent (PSF)",
+      value: assumptions.marketRentPsf != null ? `$${assumptions.marketRentPsf}` : "Unknown",
+      reasoning: assumptions.marketRentPsfReasoning,
+    },
+    {
+      label: "Employee Count",
+      value: assumptions.employeeCount?.toLocaleString() ?? "Unknown",
+      reasoning: assumptions.employeeCountReasoning,
+    },
+    {
+      label: "Annual Growth Rate",
+      value: `${(assumptions.annualGrowthRate * 100).toFixed(1)}%`,
+      reasoning: assumptions.annualGrowthRateReasoning,
+    },
+  ];
+
+  return (
+    <CollapsibleSection title="Assumptions & Sources" className="mt-4">
+      <div className="space-y-2">
+        {rows.map((row) => (
+          <div key={row.label} className="rounded border px-3 py-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-medium">{row.label}</span>
+              <span className="text-xs font-semibold">{row.value}</span>
+            </div>
+            {row.reasoning && (
+              <p className="mt-1 text-[11px] text-muted-foreground">
+                {row.reasoning}
+              </p>
+            )}
+          </div>
+        ))}
+      </div>
+      {hasSources && (
+        <div className="mt-3">
+          <p className="mb-1.5 text-[11px] font-medium text-muted-foreground">
+            Data Sources
+          </p>
+          <div className="space-y-1">
+            {assumptions.assumptionSources!.map((src, i) => (
+              <div
+                key={i}
+                className="flex items-start gap-2 text-[11px] text-muted-foreground"
+              >
+                <OriginPill source={src.source} className="mt-0.5 shrink-0" />
+                <span>
+                  <span className="font-medium">{src.assumption}:</span>{" "}
+                  {src.detail}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </CollapsibleSection>
   );
 }
 

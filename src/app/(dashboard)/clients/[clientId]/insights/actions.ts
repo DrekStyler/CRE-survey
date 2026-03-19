@@ -36,6 +36,13 @@ export async function getDrivers(clientId: string) {
   return db.select().from(drivers).where(eq(drivers.clientId, clientId));
 }
 
+export async function getFindings(clientId: string) {
+  const { userId } = await auth();
+  if (!userId) throw new Error("Unauthorized");
+
+  return db.select().from(researchFindings).where(eq(researchFindings.clientId, clientId));
+}
+
 export async function getHypotheses(clientId: string) {
   const { userId } = await auth();
   if (!userId) throw new Error("Unauthorized");
@@ -98,9 +105,10 @@ export async function generateInsights(clientId: string) {
       .join("\n");
   }
 
-  const findingsList = findings.map(
-    (f) => `[${f.category}] ${f.title}: ${f.summary} (${f.confidence}% confidence)`
-  );
+  const findingsList = findings.map((f) => ({
+    id: f.id,
+    text: `[${f.category}] ${f.title}: ${f.summary} (${f.confidence}% confidence)`,
+  }));
 
   const interviewResponses: string[] = [];
   if (interviewData[0]) {
@@ -151,7 +159,7 @@ export async function generateInsights(clientId: string) {
           title: string;
           description: string;
           impact?: string;
-          supportingEvidence?: { source: string; quote: string }[];
+          supportingEvidence?: { source: string; quote: string; findingId?: string }[];
         }) => ({
           clientId,
           type: d.type as "revenue" | "cost" | "operational" | "space",

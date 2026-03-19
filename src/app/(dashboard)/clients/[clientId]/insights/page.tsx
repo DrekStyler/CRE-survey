@@ -1,5 +1,5 @@
 import { InsightsView } from "@/components/insights/insights-view";
-import { getDrivers, getHypotheses, getScenarioProjections } from "./actions";
+import { getDrivers, getHypotheses, getScenarioProjections, getFindings } from "./actions";
 
 export default async function InsightsPage({
   params,
@@ -7,10 +7,11 @@ export default async function InsightsPage({
   params: Promise<{ clientId: string }>;
 }) {
   const { clientId } = await params;
-  const [driversList, hypothesesList, projections] = await Promise.all([
+  const [driversList, hypothesesList, projections, findingsList] = await Promise.all([
     getDrivers(clientId),
     getHypotheses(clientId),
     getScenarioProjections(clientId),
+    getFindings(clientId),
   ]);
 
   return (
@@ -27,6 +28,7 @@ export default async function InsightsPage({
         drivers={driversList}
         hypotheses={hypothesesList}
         scenarioProjections={projections}
+        findings={findingsList}
       />
     </div>
   );
