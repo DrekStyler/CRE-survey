@@ -17,7 +17,8 @@ export type RecalcField =
   | "employeeCount"
   | "revenuePerEmployee"
   | "densityFactor"
-  | "annualGrowthRate";
+  | "annualGrowthRate"
+  | "rentEscalation";
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -71,6 +72,10 @@ export function deriveAssumptions(
     }
   }
 
+  if (a.rentEscalation == null) {
+    a.rentEscalation = DEFAULT_RENT_ESCALATION;
+  }
+
   if (a.opexPerSqft == null) {
     // Use year-3 if available (true steady-state), else year-2
     const opexIdx = p.length >= 3 ? 2 : steadyIdx;
@@ -96,15 +101,17 @@ export function recalculateCosts(
   projections: YearProjection[],
   idealSqft: number,
   marketRentPsf: number | null,
-  opexPerSqft: number | null
+  opexPerSqft: number | null,
+  rentEscalation?: number | null
 ): YearProjection[] {
+  const escalation = rentEscalation ?? DEFAULT_RENT_ESCALATION;
   return projections.map((yr) => {
     const copy = { ...yr, sources: { ...yr.sources } };
     const yearIdx = copy.year; // 1-based
 
     if (marketRentPsf != null) {
       copy.leaseCost = Math.round(
-        idealSqft * marketRentPsf * Math.pow(1 + DEFAULT_RENT_ESCALATION, yearIdx - 1)
+        idealSqft * marketRentPsf * Math.pow(1 + escalation, yearIdx - 1)
       );
       copy.sources!.leaseCost = "user";
     }
@@ -112,7 +119,7 @@ export function recalculateCosts(
     if (opexPerSqft != null) {
       const ramp = OPEX_RAMP[yearIdx] ?? 1;
       copy.operationalCost = Math.round(
-        idealSqft * opexPerSqft * ramp * Math.pow(1 + DEFAULT_RENT_ESCALATION, yearIdx - 1)
+        idealSqft * opexPerSqft * ramp * Math.pow(1 + escalation, yearIdx - 1)
       );
       copy.sources!.operationalCost = "user";
     }
@@ -172,7 +179,8 @@ export function recalculateAll(
     projections,
     idealSqft,
     assumptions.marketRentPsf,
-    assumptions.opexPerSqft
+    assumptions.opexPerSqft,
+    assumptions.rentEscalation
   );
   result = recalculateRevenue(
     result,
@@ -221,11 +229,13 @@ export function recalculateFromAssumptionChange(
   switch (field) {
     case "marketRentPsf":
     case "opexPerSqft":
+    case "rentEscalation":
       updated.yearlyProjections = recalculateCosts(
         scenario.yearlyProjections,
         scenario.idealSqft,
         assumptions.marketRentPsf,
-        assumptions.opexPerSqft
+        assumptions.opexPerSqft,
+        assumptions.rentEscalation
       );
       break;
 

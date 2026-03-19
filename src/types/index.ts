@@ -83,6 +83,8 @@ export interface ScenarioProjectionData {
     opexPerSqftReasoning?: string;
     densityFactor: number | null;
     densityFactorReasoning?: string;
+    rentEscalation: number | null;       // annual rent escalation rate (e.g. 0.03 = 3%)
+    rentEscalationReasoning?: string;
     assumptionSources?: AssumptionSource[];
   };
   scenarios: {

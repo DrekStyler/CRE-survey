@@ -38,9 +38,9 @@ const SCENARIO_CONFIG: Record<
   ScenarioKey,
   { label: string; color: string; shortLabel: string; optimizes: string }
 > = {
-  npvOptimized: { label: "NPV Optimized", color: "#3b82f6", shortLabel: "NPV", optimizes: "Net Present Value" },
-  costOptimized: { label: "Cost Optimized", color: "#22c55e", shortLabel: "Cost", optimizes: "Lowest Occupancy Cost" },
-  ebitdaOptimized: { label: "EBITDA Optimized", color: "#f59e0b", shortLabel: "EBITDA", optimizes: "Operating Income" },
+  npvOptimized: { label: "Best Long-Term Value", color: "#3b82f6", shortLabel: "Value", optimizes: "Net Present Value" },
+  costOptimized: { label: "Lowest Cost", color: "#22c55e", shortLabel: "Cost", optimizes: "Lowest Occupancy Cost" },
+  ebitdaOptimized: { label: "Best Annual Return", color: "#f59e0b", shortLabel: "Return", optimizes: "Annual Operating Income" },
 };
 
 function formatDollar(value: number): string {
@@ -417,7 +417,8 @@ export function ScenarioScorecard({ data: initialData, clientId }: ScenarioScore
     | "annualGrowthRate"
     | "revenuePerEmployee"
     | "opexPerSqft"
-    | "densityFactor";
+    | "densityFactor"
+    | "rentEscalation";
 
   function handleAssumptionChange(field: AssumptionField, value: number) {
     setEditableData((prev) => {
@@ -433,6 +434,7 @@ export function ScenarioScorecard({ data: initialData, clientId }: ScenarioScore
       else if (field === "revenuePerEmployee") loc.assumptions.revenuePerEmployee = value;
       else if (field === "opexPerSqft") loc.assumptions.opexPerSqft = value;
       else if (field === "densityFactor") loc.assumptions.densityFactor = value;
+      else if (field === "rentEscalation") loc.assumptions.rentEscalation = value;
 
       // Cascade to all scenarios using rate-based recalculation
       const recalcFields: RecalcField[] = [
@@ -460,6 +462,7 @@ export function ScenarioScorecard({ data: initialData, clientId }: ScenarioScore
         revenuePerEmployee: "Revenue / Employee",
         opexPerSqft: "OpEx / SF",
         densityFactor: "Density Factor",
+        rentEscalation: "Rent Escalation",
       };
       if (!loc.assumptions.assumptionSources) {
         loc.assumptions.assumptionSources = [];
@@ -646,18 +649,21 @@ export function ScenarioScorecard({ data: initialData, clientId }: ScenarioScore
                   </TableCell>
                 ))}
               </TableRow>
-              {/* Space capacity row — shows whether headcount is constrained */}
+              {/* Headcount capacity row — shows fit vs. need */}
               {assumptions.densityFactor != null && assumptions.densityFactor > 0 && assumptions.employeeCount != null && (
                 <TableRow>
-                  <TableCell className="text-xs text-muted-foreground">Space Capacity</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">Headcount Capacity</TableCell>
                   {activeKeys.map((key) => {
                     const capacity = Math.floor(scenarios[key].idealSqft / (assumptions.densityFactor ?? 200));
                     const headcount = assumptions.employeeCount ?? 0;
                     const constrained = capacity < headcount;
+                    const gap = headcount - capacity;
                     return (
                       <TableCell key={key} className={`text-center text-xs tabular-nums ${constrained ? "text-amber-600 dark:text-amber-400" : "text-muted-foreground"}`}>
-                        {capacity.toLocaleString()} people
-                        {constrained && " (constrained)"}
+                        {capacity.toLocaleString()} of {headcount.toLocaleString()} people
+                        {constrained && (
+                          <span className="ml-1 font-medium">({gap} short)</span>
+                        )}
                       </TableCell>
                     );
                   })}
@@ -666,7 +672,14 @@ export function ScenarioScorecard({ data: initialData, clientId }: ScenarioScore
 
               {/* Financial Summary */}
               <TableRow className="border-t bg-muted/10">
-                <TableCell className="text-sm font-medium">Total Revenue</TableCell>
+                <TableCell className="text-sm font-medium">
+                  Revenue Enabled by Space
+                  {assumptions.revenuePerEmployee != null && assumptions.employeeCount != null && (
+                    <span className="ml-1 block text-[10px] font-normal text-muted-foreground">
+                      {assumptions.employeeCount.toLocaleString()} employees × ${assumptions.revenuePerEmployee.toLocaleString()}/ea
+                    </span>
+                  )}
+                </TableCell>
                 {activeKeys.map((key) => (
                   <TableCell key={key} className="text-center text-sm font-medium tabular-nums text-green-600 dark:text-green-400">
                     {formatDollar(scenarioSummaries[key].totalRevenue)}
@@ -676,7 +689,7 @@ export function ScenarioScorecard({ data: initialData, clientId }: ScenarioScore
               {hasBreakdown && (
                 <>
                   <TableRow className="bg-muted/10">
-                    <TableCell className="pl-6 text-sm text-muted-foreground">Lease Cost</TableCell>
+                    <TableCell className="pl-6 text-sm text-muted-foreground">Base Rent + Escalations</TableCell>
                     {activeKeys.map((key) => (
                       <TableCell key={key} className="text-center text-sm tabular-nums text-destructive">
                         ({formatDollar(scenarioSummaries[key].totalLeaseCost)})
@@ -694,7 +707,7 @@ export function ScenarioScorecard({ data: initialData, clientId }: ScenarioScore
                 </>
               )}
               <TableRow className="border-t bg-muted/20">
-                <TableCell className="text-sm font-bold">Total NOI</TableCell>
+                <TableCell className="text-sm font-bold">Net Space Value</TableCell>
                 {activeKeys.map((key) => {
                   const isTop = key === recommendedScenario;
                   return (
@@ -707,7 +720,7 @@ export function ScenarioScorecard({ data: initialData, clientId }: ScenarioScore
 
               {/* Key Ratios */}
               <TableRow className="border-t">
-                <TableCell className="text-sm font-medium">Avg Annual NOI</TableCell>
+                <TableCell className="text-sm font-medium">Avg Annual Net Benefit</TableCell>
                 {activeKeys.map((key) => (
                   <TableCell key={key} className="text-center text-sm font-medium tabular-nums">
                     {formatDollar(scenarioSummaries[key].avgAnnualNoi)}
@@ -715,7 +728,7 @@ export function ScenarioScorecard({ data: initialData, clientId }: ScenarioScore
                 ))}
               </TableRow>
               <TableRow>
-                <TableCell className="text-sm font-medium">Year 1 NOI</TableCell>
+                <TableCell className="text-sm font-medium">Year 1 Net Benefit</TableCell>
                 {activeKeys.map((key) => (
                   <TableCell key={key} className="text-center text-sm tabular-nums">
                     {formatDollar(scenarioSummaries[key].yr1Noi)}
@@ -723,7 +736,7 @@ export function ScenarioScorecard({ data: initialData, clientId }: ScenarioScore
                 ))}
               </TableRow>
               <TableRow>
-                <TableCell className="text-sm font-medium">Steady-State NOI</TableCell>
+                <TableCell className="text-sm font-medium">Stabilized Annual Benefit</TableCell>
                 {activeKeys.map((key) => (
                   <TableCell key={key} className="text-center text-sm tabular-nums">
                     {formatDollar(scenarioSummaries[key].steadyStateNoi)}
@@ -732,7 +745,7 @@ export function ScenarioScorecard({ data: initialData, clientId }: ScenarioScore
                 ))}
               </TableRow>
               <TableRow>
-                <TableCell className="text-sm font-medium">Cost / SF / Year</TableCell>
+                <TableCell className="text-sm font-medium">Effective Gross Cost / SF</TableCell>
                 {activeKeys.map((key) => (
                   <TableCell key={key} className="text-center text-sm tabular-nums">
                     {scenarioSummaries[key].costPerSqft}
@@ -791,6 +804,7 @@ export function ScenarioScorecard({ data: initialData, clientId }: ScenarioScore
           scenarios={scenarios}
           activeScenarios={activeScenarios}
           hasBreakdown={hasBreakdown}
+          assumptions={assumptions}
           onProjectionChange={handleProjectionChange}
           clientId={clientId}
         />
@@ -841,7 +855,18 @@ type AssumptionFieldKey =
   | "annualGrowthRate"
   | "revenuePerEmployee"
   | "opexPerSqft"
-  | "densityFactor";
+  | "densityFactor"
+  | "rentEscalation";
+
+interface AssumptionRow {
+  label: string;
+  field: AssumptionFieldKey;
+  value: number | null;
+  displayValue: string;
+  format: (v: number) => string;
+  reasoning?: string;
+  source?: string;
+}
 
 function AssumptionsPanel({
   assumptions,
@@ -852,22 +877,8 @@ function AssumptionsPanel({
   onAssumptionChange: (field: AssumptionFieldKey, value: number) => void;
   clientId: string;
 }) {
-  const hasReasoning =
-    assumptions.currentSqftReasoning ||
-    assumptions.marketRentPsfReasoning ||
-    assumptions.employeeCountReasoning ||
-    assumptions.annualGrowthRateReasoning;
-
   const hasSources =
     assumptions.assumptionSources && assumptions.assumptionSources.length > 0;
-
-  // Always show the panel since new assumption fields are always useful
-  const hasAnyData = hasReasoning || hasSources ||
-    assumptions.revenuePerEmployee != null ||
-    assumptions.opexPerSqft != null ||
-    assumptions.densityFactor != null;
-
-  if (!hasAnyData) return null;
 
   function getSource(label: string): string | undefined {
     return assumptions.assumptionSources?.find(
@@ -875,15 +886,8 @@ function AssumptionsPanel({
     )?.source;
   }
 
-  const rows: {
-    label: string;
-    field: AssumptionFieldKey;
-    value: number | null;
-    displayValue: string;
-    format: (v: number) => string;
-    reasoning?: string;
-    source?: string;
-  }[] = [
+  // --- Deal Terms: what the broker controls ---
+  const dealTermRows: AssumptionRow[] = [
     {
       label: "Current Sqft",
       field: "currentSqft",
@@ -903,6 +907,28 @@ function AssumptionsPanel({
       source: getSource("rent"),
     },
     {
+      label: "Annual Rent Escalation",
+      field: "rentEscalation",
+      value: assumptions.rentEscalation ?? null,
+      displayValue: assumptions.rentEscalation != null ? `${(assumptions.rentEscalation * 100).toFixed(1)}%` : "3.0%",
+      format: (v) => `${(v * 100).toFixed(1)}%`,
+      reasoning: assumptions.rentEscalationReasoning,
+      source: getSource("escalation"),
+    },
+    {
+      label: "OpEx / SF",
+      field: "opexPerSqft",
+      value: assumptions.opexPerSqft ?? null,
+      displayValue: assumptions.opexPerSqft != null ? `$${assumptions.opexPerSqft}` : "Unknown",
+      format: (v) => `$${v}`,
+      reasoning: assumptions.opexPerSqftReasoning,
+      source: getSource("opex"),
+    },
+  ];
+
+  // --- Business Inputs: what the client/CFO controls ---
+  const businessInputRows: AssumptionRow[] = [
+    {
       label: "Employee Count",
       field: "employeeCount",
       value: assumptions.employeeCount,
@@ -910,15 +936,6 @@ function AssumptionsPanel({
       format: (v) => v.toLocaleString(),
       reasoning: assumptions.employeeCountReasoning,
       source: getSource("employee"),
-    },
-    {
-      label: "Annual Growth Rate",
-      field: "annualGrowthRate",
-      value: assumptions.annualGrowthRate,
-      displayValue: `${(assumptions.annualGrowthRate * 100).toFixed(1)}%`,
-      format: (v) => `${(v * 100).toFixed(1)}%`,
-      reasoning: assumptions.annualGrowthRateReasoning,
-      source: getSource("growth"),
     },
     {
       label: "Revenue / Employee",
@@ -930,16 +947,16 @@ function AssumptionsPanel({
       source: getSource("revenue"),
     },
     {
-      label: "OpEx / SF",
-      field: "opexPerSqft",
-      value: assumptions.opexPerSqft ?? null,
-      displayValue: assumptions.opexPerSqft != null ? `$${assumptions.opexPerSqft}` : "Unknown",
-      format: (v) => `$${v}`,
-      reasoning: assumptions.opexPerSqftReasoning,
-      source: getSource("opex"),
+      label: "Annual Growth Rate",
+      field: "annualGrowthRate",
+      value: assumptions.annualGrowthRate,
+      displayValue: `${(assumptions.annualGrowthRate * 100).toFixed(1)}%`,
+      format: (v) => `${(v * 100).toFixed(1)}%`,
+      reasoning: assumptions.annualGrowthRateReasoning,
+      source: getSource("growth"),
     },
     {
-      label: "Density (SF/Employee)",
+      label: "Space Density (SF/Employee)",
       field: "densityFactor",
       value: assumptions.densityFactor ?? null,
       displayValue: assumptions.densityFactor != null ? `${assumptions.densityFactor} SF` : "Unknown",
@@ -949,8 +966,8 @@ function AssumptionsPanel({
     },
   ];
 
-  return (
-    <CollapsibleSection title="Assumptions & Sources" defaultOpen className="mt-0">
+  function renderRows(rows: AssumptionRow[]) {
+    return (
       <div className="space-y-2">
         {rows.map((row) => (
           <div key={row.label} className="rounded border px-3 py-2">
@@ -980,6 +997,29 @@ function AssumptionsPanel({
           </div>
         ))}
       </div>
+    );
+  }
+
+  return (
+    <CollapsibleSection title="Assumptions & Sources" defaultOpen className="mt-0">
+      <div className="space-y-4">
+        {/* Deal Terms — broker-controlled levers */}
+        <div>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Deal Terms
+          </p>
+          {renderRows(dealTermRows)}
+        </div>
+
+        {/* Business Inputs — client/CFO-controlled */}
+        <div>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Business Inputs
+          </p>
+          {renderRows(businessInputRows)}
+        </div>
+      </div>
+
       {hasSources && (
         <div className="mt-3">
           <p className="mb-1.5 text-[11px] font-medium text-muted-foreground">

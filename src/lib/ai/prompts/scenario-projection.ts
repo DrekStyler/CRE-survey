@@ -42,6 +42,8 @@ You MUST respond with valid JSON matching this EXACT structure:
     "opexPerSqftReasoning": "string - steady-state operational cost per sqft per year (excluding ramp-up)",
     "densityFactor": number | null,
     "densityFactorReasoning": "string - sqft per employee, typically 150-250",
+    "rentEscalation": number | null,
+    "rentEscalationReasoning": "string - annual rent escalation rate as decimal (e.g. 0.03 = 3%), typically 0.02-0.04",
     "assumptionSources": [
       { "assumption": "string - assumption name", "source": "string - data source", "detail": "string - specific data point or reasoning" }
     ]
@@ -210,6 +212,8 @@ You MUST respond with valid JSON matching this EXACT structure:
     "opexPerSqftReasoning": "string - steady-state operational cost per sqft per year (excluding ramp-up)",
     "densityFactor": number | null,
     "densityFactorReasoning": "string - sqft per employee, typically 150-250",
+    "rentEscalation": number | null,
+    "rentEscalationReasoning": "string - annual rent escalation rate as decimal (e.g. 0.03 = 3%), typically 0.02-0.04",
     "assumptionSources": [
       { "assumption": "string - assumption name", "source": "string - data source", "detail": "string - specific data point or reasoning" }
     ]

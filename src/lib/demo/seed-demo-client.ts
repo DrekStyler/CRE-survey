@@ -481,6 +481,9 @@ function buildDemoProjections(): ScenarioProjectionData {
       densityFactor: 375,
       densityFactorReasoning:
         "Higher density than standard office due to clinical space requirements including imaging, procedure rooms, and shared clinical areas. 375 sqft/person.",
+      rentEscalation: 0.03,
+      rentEscalationReasoning:
+        "Standard 3% annual escalation per Northern Colorado medical office market norms.",
       assumptionSources: [
         {
           assumption: "Current Sqft",

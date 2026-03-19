@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { ChevronRight, ChevronDown } from "lucide-react";
+import { ChevronRight, ChevronDown, AlertTriangle } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -27,9 +27,9 @@ const SCENARIO_CONFIG: Record<
   ScenarioKey,
   { label: string; color: string; dot: string }
 > = {
-  npvOptimized: { label: "NPV Optimized", color: "#3b82f6", dot: "🔵" },
-  costOptimized: { label: "Cost Optimized", color: "#22c55e", dot: "🟢" },
-  ebitdaOptimized: { label: "EBITDA Optimized", color: "#f59e0b", dot: "🟡" },
+  npvOptimized: { label: "Best Long-Term Value", color: "#3b82f6", dot: "🔵" },
+  costOptimized: { label: "Lowest Cost", color: "#22c55e", dot: "🟢" },
+  ebitdaOptimized: { label: "Best Annual Return", color: "#f59e0b", dot: "🟡" },
 };
 
 function formatDollar(value: number): string {
@@ -118,6 +118,13 @@ interface FinancialTableProps {
   activeScenarios: Set<ScenarioKey>;
   hasBreakdown: boolean;
   clientId?: string;
+  assumptions?: {
+    employeeCount?: number | null;
+    revenuePerEmployee?: number | null;
+    densityFactor?: number | null;
+    rentEscalation?: number | null;
+    marketRentPsf?: number | null;
+  };
   onProjectionChange?: (
     scenarioKey: ScenarioKey,
     yearIndex: number,
@@ -131,6 +138,7 @@ export function FinancialTable({
   activeScenarios,
   hasBreakdown,
   clientId,
+  assumptions,
   onProjectionChange,
 }: FinancialTableProps) {
   const [expandedScenarios, setExpandedScenarios] = useState<Set<ScenarioKey>>(
@@ -207,6 +215,8 @@ export function FinancialTable({
                   yearCols={yearCols}
                   isExpanded={isExpanded}
                   hasBreakdown={hasBreakdown}
+                  idealSqft={scenario.idealSqft}
+                  assumptions={assumptions}
                   onToggle={() => toggleExpand(key)}
                   onProjectionChange={onProjectionChange}
                   clientId={clientId}
@@ -228,6 +238,8 @@ function ScenarioRows({
   yearCols,
   isExpanded,
   hasBreakdown,
+  idealSqft,
+  assumptions,
   onToggle,
   onProjectionChange,
   clientId,
@@ -239,6 +251,8 @@ function ScenarioRows({
   yearCols: number[];
   isExpanded: boolean;
   hasBreakdown: boolean;
+  idealSqft?: number;
+  assumptions?: FinancialTableProps["assumptions"];
   onToggle: () => void;
   onProjectionChange?: (
     scenarioKey: ScenarioKey,
@@ -264,7 +278,7 @@ function ScenarioRows({
               className="h-2.5 w-2.5 shrink-0 rounded-full"
               style={{ backgroundColor: cfg.color }}
             />
-            <span>NOI — {cfg.label}</span>
+            <span>Net Benefit — {cfg.label}</span>
           </div>
         </TableCell>
         {yearCols.map((yr) => {
@@ -284,7 +298,7 @@ function ScenarioRows({
       {isExpanded && (
         <>
           <EditableSubRow
-            label="Revenue"
+            label="Revenue Enabled by Space"
             metric="revenue"
             scenarioKey={scenarioKey}
             yearCols={yearCols}
@@ -295,11 +309,39 @@ function ScenarioRows({
             onProjectionChange={onProjectionChange}
             clientId={clientId}
           />
+          {/* Revenue formula breakdown */}
+          {assumptions?.employeeCount && assumptions?.revenuePerEmployee && idealSqft && (
+            <TableRow className="bg-muted/10">
+              <TableCell
+                colSpan={yearCols.length + 2}
+                className="sticky left-0 z-10 bg-muted/10 pl-14 text-[11px] text-muted-foreground"
+              >
+                <span className="italic">
+                  {(() => {
+                    const density = assumptions.densityFactor ?? 200;
+                    const capacity = Math.floor(idealSqft / density);
+                    const effective = Math.min(assumptions.employeeCount, capacity);
+                    const constrained = capacity < assumptions.employeeCount;
+                    return (
+                      <>
+                        {effective.toLocaleString()} employees × ${assumptions.revenuePerEmployee.toLocaleString()}/employee
+                        {constrained && (
+                          <span className="ml-1 text-amber-600 dark:text-amber-400">
+                            (capped by space: fits {capacity}, need {assumptions.employeeCount})
+                          </span>
+                        )}
+                      </>
+                    );
+                  })()}
+                </span>
+              </TableCell>
+            </TableRow>
+          )}
 
           {hasBreakdown ? (
             <>
               <EditableSubRow
-                label="Lease Cost"
+                label="Base Rent + Escalations"
                 metric="leaseCost"
                 scenarioKey={scenarioKey}
                 yearCols={yearCols}
@@ -310,6 +352,19 @@ function ScenarioRows({
                 onProjectionChange={onProjectionChange}
                 clientId={clientId}
               />
+              {/* Lease cost formula breakdown */}
+              {assumptions?.marketRentPsf && idealSqft && (
+                <TableRow className="bg-muted/10">
+                  <TableCell
+                    colSpan={yearCols.length + 2}
+                    className="sticky left-0 z-10 bg-muted/10 pl-14 text-[11px] text-muted-foreground"
+                  >
+                    <span className="italic">
+                      {idealSqft.toLocaleString()} SF × ${assumptions.marketRentPsf}/SF + {((assumptions.rentEscalation ?? 0.03) * 100).toFixed(1)}% annual escalation
+                    </span>
+                  </TableCell>
+                </TableRow>
+              )}
               <EditableSubRow
                 label="Operating Expenses"
                 metric="operationalCost"
@@ -341,6 +396,23 @@ function ScenarioRows({
 
 function getMetricSource(proj: YearProjection | undefined, metric: EditableMetric): string | undefined {
   return proj?.sources?.[metric];
+}
+
+// Ramp factor labels — explains why Year 1/2 values differ from steady-state
+const RAMP_NOTES: Record<string, Record<number, string>> = {
+  revenue: {
+    1: "70% — partial occupancy ramp",
+    2: "90% — hiring ramp",
+  },
+  operationalCost: {
+    1: "1.5× — move-in/buildout costs",
+    2: "1.1× — settling-in costs",
+  },
+};
+
+/** Returns a ramp annotation if this year/metric has a non-1.0 ramp factor. */
+function getRampNote(metric: EditableMetric, yearIdx: number): string | null {
+  return RAMP_NOTES[metric]?.[yearIdx] ?? null;
 }
 
 function EditableSubRow({
@@ -396,6 +468,7 @@ function EditableSubRow({
         const val = proj ? (proj[metric as keyof YearProjection] as number | undefined) : undefined;
         const source = getMetricSource(proj, metric);
         const isEdited = source === "user";
+        const rampNote = getRampNote(metric, yr);
 
         if (val == null) {
           return (
@@ -407,18 +480,26 @@ function EditableSubRow({
 
         return (
           <TableCell key={yr} className={`text-right text-xs tabular-nums ${colorClass}`}>
-            {onProjectionChange ? (
-              <EditableCell
-                value={val}
-                isCost={isCost}
-                isEdited={isEdited}
-                onChange={(newValue) =>
-                  onProjectionChange(scenarioKey, yr - 1, metric, newValue)
-                }
-              />
-            ) : (
-              isCost ? formatCost(val) : formatDollar(val)
-            )}
+            <div className="flex flex-col items-end gap-0.5">
+              {onProjectionChange ? (
+                <EditableCell
+                  value={val}
+                  isCost={isCost}
+                  isEdited={isEdited}
+                  onChange={(newValue) =>
+                    onProjectionChange(scenarioKey, yr - 1, metric, newValue)
+                  }
+                />
+              ) : (
+                isCost ? formatCost(val) : formatDollar(val)
+              )}
+              {rampNote && (
+                <span className="flex items-center gap-0.5 text-[10px] text-amber-600 dark:text-amber-400" title={rampNote}>
+                  <AlertTriangle className="h-2.5 w-2.5" />
+                  <span className="max-w-[80px] truncate">{rampNote}</span>
+                </span>
+              )}
+            </div>
           </TableCell>
         );
       })}
