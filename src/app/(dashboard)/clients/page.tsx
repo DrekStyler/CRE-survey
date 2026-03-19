@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Plus } from "lucide-react";
+import { DeleteClientButton } from "./delete-button";
 
 export default async function ClientsPage() {
   const { userId } = await auth();
@@ -56,12 +57,13 @@ export default async function ClientsPage() {
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead>Company</TableHead>
-                <TableHead>Industry</TableHead>
-                <TableHead>Location</TableHead>
-                <TableHead>Employees</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Updated</TableHead>
+                <TableHead className="font-bold">Company</TableHead>
+                <TableHead className="font-bold">Industry</TableHead>
+                <TableHead className="font-bold">Location</TableHead>
+                <TableHead className="font-bold">Employees</TableHead>
+                <TableHead className="font-bold">Status</TableHead>
+                <TableHead className="font-bold">Updated</TableHead>
+                <TableHead className="w-[50px]" />
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -90,6 +92,12 @@ export default async function ClientsPage() {
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
                     {new Date(client.updatedAt).toLocaleDateString()}
+                  </TableCell>
+                  <TableCell>
+                    <DeleteClientButton
+                      clientId={client.id}
+                      clientName={client.legalName}
+                    />
                   </TableCell>
                 </TableRow>
               ))}

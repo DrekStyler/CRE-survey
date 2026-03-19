@@ -79,3 +79,16 @@ export async function updateClient(
   revalidatePath(`/clients/${clientId}`);
   revalidatePath("/clients");
 }
+
+export async function deleteClient(clientId: string) {
+  const { userId } = await auth();
+  if (!userId) throw new Error("Unauthorized");
+
+  const existing = await getClient(clientId);
+  if (existing.createdBy !== userId) throw new Error("Unauthorized");
+
+  // Cascade deletes handle all related records (interviews, findings, etc.)
+  await db.delete(clients).where(eq(clients.id, clientId));
+
+  revalidatePath("/clients");
+}
