@@ -344,6 +344,61 @@ export function ScenarioScorecard({ data: initialData, clientId }: ScenarioScore
     });
   }
 
+  // Scale all yearly projections proportionally and recalculate derived values
+  function scaleProjections(
+    scenario: { yearlyProjections: YearProjection[] },
+    fields: { revenue?: number; leaseCost?: number; operationalCost?: number }
+  ) {
+    for (const yr of scenario.yearlyProjections) {
+      if (fields.revenue != null) {
+        yr.revenue = Math.round(yr.revenue * fields.revenue);
+        if (!yr.sources) yr.sources = {};
+        yr.sources.revenue = "user";
+      }
+      if (fields.leaseCost != null && yr.leaseCost != null) {
+        yr.leaseCost = Math.round(yr.leaseCost * fields.leaseCost);
+        if (!yr.sources) yr.sources = {};
+        yr.sources.leaseCost = "user";
+      }
+      if (fields.operationalCost != null && yr.operationalCost != null) {
+        yr.operationalCost = Math.round(yr.operationalCost * fields.operationalCost);
+        if (!yr.sources) yr.sources = {};
+        yr.sources.operationalCost = "user";
+      }
+      // Recalculate derived
+      if (yr.leaseCost != null && yr.operationalCost != null) {
+        yr.cost = yr.leaseCost + yr.operationalCost;
+      }
+      yr.netProfit = yr.revenue - yr.cost;
+    }
+  }
+
+  // Recompute yearly growth from year 1 base using a new growth rate
+  function reapplyGrowthRate(
+    scenario: { yearlyProjections: YearProjection[] },
+    newRate: number
+  ) {
+    const p = scenario.yearlyProjections;
+    if (p.length < 2) return;
+    const base = p[0];
+    for (let i = 1; i < p.length; i++) {
+      const factor = Math.pow(1 + newRate, i);
+      p[i].revenue = Math.round(base.revenue * factor);
+      if (base.leaseCost != null && p[i].leaseCost != null) {
+        p[i].leaseCost = Math.round(base.leaseCost * Math.pow(1.03, i));
+      }
+      if (base.operationalCost != null && p[i].operationalCost != null) {
+        p[i].operationalCost = Math.round(base.operationalCost * Math.pow(1.03, i));
+      }
+      if (p[i].leaseCost != null && p[i].operationalCost != null) {
+        p[i].cost = p[i].leaseCost! + p[i].operationalCost!;
+      }
+      p[i].netProfit = p[i].revenue - p[i].cost;
+      if (!p[i].sources) p[i].sources = {};
+      p[i].sources!.revenue = "user";
+    }
+  }
+
   function handleScenarioParamChange(
     scenarioKey: ScenarioKey,
     param: "idealSqft" | "leaseTerm",
@@ -356,7 +411,18 @@ export function ScenarioScorecard({ data: initialData, clientId }: ScenarioScore
       const scenario = loc.scenarios[scenarioKey];
 
       if (param === "idealSqft") {
-        scenario.idealSqft = Math.round(value);
+        const oldSqft = scenario.idealSqft;
+        const newSqft = Math.round(value);
+        if (oldSqft > 0 && newSqft !== oldSqft) {
+          const ratio = newSqft / oldSqft;
+          // Scale all sqft-dependent metrics proportionally
+          scaleProjections(scenario, {
+            revenue: ratio,
+            leaseCost: ratio,
+            operationalCost: ratio,
+          });
+        }
+        scenario.idealSqft = newSqft;
       } else if (param === "leaseTerm") {
         const newTerm = Math.round(value);
         const oldTerm = scenario.yearlyProjections.length;
@@ -404,10 +470,32 @@ export function ScenarioScorecard({ data: initialData, clientId }: ScenarioScore
       const nextLocations = normalizeToLocations(next);
       const loc = nextLocations[selectedLocationIdx];
 
+      const oldAssumptions = { ...loc.assumptions };
+
       if (field === "currentSqft") loc.assumptions.currentSqft = value;
       else if (field === "marketRentPsf") loc.assumptions.marketRentPsf = value;
       else if (field === "employeeCount") loc.assumptions.employeeCount = value;
       else if (field === "annualGrowthRate") loc.assumptions.annualGrowthRate = value;
+
+      // Cascade assumption changes to all scenarios
+      for (const key of ["npvOptimized", "costOptimized", "ebitdaOptimized"] as const) {
+        const scenario = loc.scenarios[key];
+        if (!scenario) continue;
+
+        if (field === "marketRentPsf" && oldAssumptions.marketRentPsf && oldAssumptions.marketRentPsf > 0) {
+          // Market rent directly affects lease cost
+          const ratio = value / oldAssumptions.marketRentPsf;
+          scaleProjections(scenario, { leaseCost: ratio });
+        } else if (field === "employeeCount" && oldAssumptions.employeeCount && oldAssumptions.employeeCount > 0) {
+          // Employee count affects revenue (more people = more productivity/patients)
+          const ratio = value / oldAssumptions.employeeCount;
+          scaleProjections(scenario, { revenue: ratio });
+        } else if (field === "annualGrowthRate") {
+          // Growth rate recomputes the escalation curve from year 1
+          reapplyGrowthRate(scenario, value);
+        }
+        // currentSqft is informational — idealSqft on each scenario drives the actual scaling
+      }
 
       const fieldLabels: Record<string, string> = {
         currentSqft: "Current Sqft",
