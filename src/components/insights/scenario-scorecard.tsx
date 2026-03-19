@@ -11,8 +11,8 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Badge } from "@/components/ui/badge";
-import { MapPin, Check, Loader2, ChevronDown, ChevronUp, Trophy } from "lucide-react";
+
+import { MapPin, Check, Loader2, ChevronDown, ChevronUp } from "lucide-react";
 import { CollapsibleSection, ReasoningText, OriginPill } from "@/components/ui/citation-badge";
 import { FinancialTable } from "@/components/insights/financial-table";
 import { updateScenarioProjections } from "@/app/(dashboard)/clients/[clientId]/insights/actions";
@@ -294,19 +294,6 @@ export function ScenarioScorecard({ data: initialData, clientId }: ScenarioScore
     return summaries;
   }, [scenarios]);
 
-  // Find the "recommended" scenario (highest total NOI)
-  const recommendedScenario = useMemo(() => {
-    let best: ScenarioKey = "npvOptimized";
-    let bestNoi = -Infinity;
-    for (const key of Object.keys(scenarioSummaries) as ScenarioKey[]) {
-      if (scenarioSummaries[key].totalNoi > bestNoi) {
-        bestNoi = scenarioSummaries[key].totalNoi;
-        best = key;
-      }
-    }
-    return best;
-  }, [scenarioSummaries]);
-
   // Debounced auto-save
   const scheduleSave = useCallback(
     (newData: StoredProjectionData) => {
@@ -586,23 +573,14 @@ export function ScenarioScorecard({ data: initialData, clientId }: ScenarioScore
                 <TableHead className="w-[160px]">Metric</TableHead>
                 {activeKeys.map((key) => {
                   const cfg = SCENARIO_CONFIG[key];
-                  const isRecommended = key === recommendedScenario;
                   return (
                     <TableHead key={key} className="text-center">
-                      <div className="flex items-center justify-center gap-2">
-                        {isRecommended && (
-                          <Badge variant="default" className="gap-1 text-[10px]">
-                            <Trophy className="h-2.5 w-2.5" />
-                            Top
-                          </Badge>
-                        )}
-                        <div className="flex items-center gap-1.5">
-                          <span
-                            className="inline-block h-2.5 w-2.5 rounded-full"
-                            style={{ backgroundColor: cfg.color }}
-                          />
-                          <span className="font-semibold">{cfg.shortLabel}</span>
-                        </div>
+                      <div className="flex items-center justify-center gap-1.5">
+                        <span
+                          className="inline-block h-2.5 w-2.5 rounded-full"
+                          style={{ backgroundColor: cfg.color }}
+                        />
+                        <span className="font-semibold">{cfg.shortLabel}</span>
                       </div>
                     </TableHead>
                   );
@@ -709,9 +687,8 @@ export function ScenarioScorecard({ data: initialData, clientId }: ScenarioScore
               <TableRow className="border-t bg-muted/20">
                 <TableCell className="text-sm font-bold">Net Space Value</TableCell>
                 {activeKeys.map((key) => {
-                  const isTop = key === recommendedScenario;
                   return (
-                    <TableCell key={key} className={`text-center text-sm font-bold tabular-nums ${isTop ? "text-foreground" : ""}`}>
+                    <TableCell key={key} className="text-center text-sm font-bold tabular-nums">
                       {formatDollar(scenarioSummaries[key].totalNoi)}
                     </TableCell>
                   );

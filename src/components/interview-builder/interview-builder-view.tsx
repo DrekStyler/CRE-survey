@@ -192,6 +192,14 @@ export function InterviewBuilderView({
                   </p>
                 </CardHeader>
                 <CardContent className="space-y-3">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => addQuestion(section.id)}
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add Question
+                  </Button>
                   {section.questions.map((question, idx) => (
                     <div
                       key={question.id}
@@ -236,14 +244,6 @@ export function InterviewBuilderView({
                       </Button>
                     </div>
                   ))}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => addQuestion(section.id)}
-                  >
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add Question
-                  </Button>
                 </CardContent>
               </Card>
             </TabsContent>
