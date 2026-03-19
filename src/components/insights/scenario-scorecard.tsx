@@ -1,19 +1,18 @@
 "use client";
 
 import { useState, useMemo, useRef, useCallback, useEffect } from "react";
-import {
-  ComposedChart,
-  Line,
-  LineChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-} from "recharts";
+import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Building2, Clock, MapPin, X, Check, Loader2 } from "lucide-react";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { Badge } from "@/components/ui/badge";
+import { MapPin, Check, Loader2, ChevronDown, ChevronUp, Trophy } from "lucide-react";
 import { CollapsibleSection, ReasoningText, OriginPill } from "@/components/ui/citation-badge";
 import { FinancialTable } from "@/components/insights/financial-table";
 import { updateScenarioProjections } from "@/app/(dashboard)/clients/[clientId]/insights/actions";
@@ -26,29 +25,16 @@ import type {
 } from "@/types";
 
 type ScenarioKey = "npvOptimized" | "costOptimized" | "ebitdaOptimized";
-type MetricKey = "revenue" | "leaseCost" | "operationalCost" | "netProfit";
 type EditableMetric = "revenue" | "leaseCost" | "operationalCost";
 
 const SCENARIO_CONFIG: Record<
   ScenarioKey,
-  { label: string; color: string; shortLabel: string }
+  { label: string; color: string; shortLabel: string; optimizes: string }
 > = {
-  npvOptimized: { label: "NPV Optimized", color: "#3b82f6", shortLabel: "NPV" },
-  costOptimized: { label: "Cost Optimized", color: "#22c55e", shortLabel: "Cost" },
-  ebitdaOptimized: { label: "EBITDA Optimized", color: "#f59e0b", shortLabel: "EBITDA" },
+  npvOptimized: { label: "NPV Optimized", color: "#3b82f6", shortLabel: "NPV", optimizes: "Net Present Value" },
+  costOptimized: { label: "Cost Optimized", color: "#22c55e", shortLabel: "Cost", optimizes: "Lowest Occupancy Cost" },
+  ebitdaOptimized: { label: "EBITDA Optimized", color: "#f59e0b", shortLabel: "EBITDA", optimizes: "Operating Income" },
 };
-
-const METRIC_CONFIG: Record<
-  MetricKey,
-  { label: string; color: string }
-> = {
-  revenue: { label: "Revenue", color: "#22c55e" },
-  leaseCost: { label: "Lease Cost", color: "#ef4444" },
-  operationalCost: { label: "OpEx", color: "#f59e0b" },
-  netProfit: { label: "NOI", color: "#3b82f6" },
-};
-
-const LEGACY_COST_METRIC = { label: "Total Cost", color: "#ef4444" };
 
 function formatDollar(value: number): string {
   const abs = Math.abs(value);
@@ -56,6 +42,17 @@ function formatDollar(value: number): string {
   if (abs >= 1_000_000) return `${sign}$${(abs / 1_000_000).toFixed(1)}M`;
   if (abs >= 1_000) return `${sign}$${(abs / 1_000).toFixed(0)}K`;
   return `${sign}$${abs.toFixed(0)}`;
+}
+
+function formatDollarFull(value: number): string {
+  return value < 0
+    ? `-$${Math.abs(value).toLocaleString()}`
+    : `$${value.toLocaleString()}`;
+}
+
+function formatCostPsf(totalCost: number, sqft: number, years: number): string {
+  if (!sqft || !years) return "—";
+  return `$${((totalCost / sqft) / years).toFixed(0)}`;
 }
 
 function isMultiLocation(
@@ -85,12 +82,10 @@ function normalizeToLocations(data: StoredProjectionData): LocationProjection[] 
   ];
 }
 
-// Deep clone helper
 function cloneData(data: StoredProjectionData): StoredProjectionData {
   return JSON.parse(JSON.stringify(data));
 }
 
-// Rebuild StoredProjectionData from locations
 function rebuildFromLocations(
   original: StoredProjectionData,
   locations: LocationProjection[]
@@ -98,7 +93,6 @@ function rebuildFromLocations(
   if (isMultiLocation(original)) {
     return { ...original, locations };
   }
-  // Single-location: unwrap
   const loc = locations[0];
   return {
     generatedAt: (original as ScenarioProjectionData).generatedAt,
@@ -156,7 +150,7 @@ function InlineEdit({
           if (e.key === "Enter") commit();
           if (e.key === "Escape") setEditing(false);
         }}
-        className="w-20 rounded border bg-background px-1 py-0.5 text-xs tabular-nums focus:outline-none focus:ring-1 focus:ring-primary"
+        className="w-24 rounded border bg-background px-2 py-1 text-right text-sm tabular-nums focus:outline-none focus:ring-1 focus:ring-primary"
       />
     );
   }
@@ -165,37 +159,10 @@ function InlineEdit({
     <button
       type="button"
       onClick={startEdit}
-      className={`cursor-pointer rounded px-1 py-0.5 text-xs tabular-nums hover:bg-muted/60 ${className || ""}`}
+      className={`cursor-pointer rounded px-2 py-1 text-sm tabular-nums hover:bg-muted/60 ${className || ""}`}
     >
       {format(value)}
     </button>
-  );
-}
-
-// --- Sparkline ---
-function Sparkline({
-  data,
-  color,
-  height = 40,
-}: {
-  data: number[];
-  color: string;
-  height?: number;
-}) {
-  const chartData = data.map((v, i) => ({ v, i }));
-  return (
-    <ResponsiveContainer width="100%" height={height}>
-      <LineChart data={chartData}>
-        <Line
-          type="monotone"
-          dataKey="v"
-          stroke={color}
-          strokeWidth={1.5}
-          dot={false}
-          isAnimationActive={false}
-        />
-      </LineChart>
-    </ResponsiveContainer>
   );
 }
 
@@ -229,13 +196,13 @@ interface ScenarioScorecardProps {
 }
 
 export function ScenarioScorecard({ data: initialData, clientId }: ScenarioScorecardProps) {
-  // Editable local state
   const [editableData, setEditableData] = useState<StoredProjectionData>(() =>
     cloneData(initialData)
   );
   const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
   const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const savedTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [expandedReasoning, setExpandedReasoning] = useState<ScenarioKey | null>(null);
 
   const locations = useMemo(() => normalizeToLocations(editableData), [editableData]);
   const isMultiLoc = locations.length > 1;
@@ -244,11 +211,9 @@ export function ScenarioScorecard({ data: initialData, clientId }: ScenarioScore
   const [activeScenarios, setActiveScenarios] = useState<Set<ScenarioKey>>(
     new Set(["npvOptimized", "costOptimized", "ebitdaOptimized"])
   );
-  const [selectedMetric, setSelectedMetric] = useState<MetricKey | "cost" | null>(null);
 
   const currentLocation = locations[selectedLocationIdx] || locations[0];
   const { scenarios, confidence, assumptions } = currentLocation;
-  const bandPct = useMemo(() => (100 - confidence) / 200, [confidence]);
 
   const hasBreakdown = useMemo(
     () =>
@@ -260,9 +225,74 @@ export function ScenarioScorecard({ data: initialData, clientId }: ScenarioScore
     [scenarios]
   );
 
-  const metricKeys: (MetricKey | "cost")[] = hasBreakdown
-    ? ["revenue", "leaseCost", "operationalCost", "netProfit"]
-    : ["revenue", "cost" as const, "netProfit"];
+  // Compute scenario summaries for the comparison table
+  const scenarioSummaries = useMemo(() => {
+    const summaries: Record<ScenarioKey, {
+      totalRevenue: number;
+      totalLeaseCost: number;
+      totalOpex: number;
+      totalCost: number;
+      totalNoi: number;
+      avgAnnualNoi: number;
+      yr1Noi: number;
+      steadyStateNoi: number;
+      costPerSqft: string;
+      noiPerSqft: string;
+      paybackYears: number | null;
+    }> = {} as Record<ScenarioKey, ReturnType<() => typeof summaries[ScenarioKey]>>;
+
+    for (const key of Object.keys(SCENARIO_CONFIG) as ScenarioKey[]) {
+      const scenario = scenarios[key];
+      if (!scenario) continue;
+      const p = scenario.yearlyProjections;
+      const totalRevenue = p.reduce((s, yr) => s + yr.revenue, 0);
+      const totalLeaseCost = p.reduce((s, yr) => s + (yr.leaseCost ?? 0), 0);
+      const totalOpex = p.reduce((s, yr) => s + (yr.operationalCost ?? 0), 0);
+      const totalCost = p.reduce((s, yr) => s + yr.cost, 0);
+      const totalNoi = p.reduce((s, yr) => s + yr.netProfit, 0);
+      const avgAnnualNoi = p.length > 0 ? totalNoi / p.length : 0;
+      const yr1Noi = p[0]?.netProfit ?? 0;
+      const steadyStateNoi = p.length >= 3 ? p[p.length - 1].netProfit : yr1Noi;
+
+      // Payback: first year where cumulative NOI > 0
+      let cumulative = 0;
+      let paybackYears: number | null = null;
+      for (let i = 0; i < p.length; i++) {
+        cumulative += p[i].netProfit;
+        if (cumulative > 0 && paybackYears === null) {
+          paybackYears = i + 1;
+        }
+      }
+
+      summaries[key] = {
+        totalRevenue,
+        totalLeaseCost,
+        totalOpex,
+        totalCost,
+        totalNoi,
+        avgAnnualNoi,
+        yr1Noi,
+        steadyStateNoi,
+        costPerSqft: formatCostPsf(totalCost, scenario.idealSqft, p.length),
+        noiPerSqft: formatCostPsf(totalNoi, scenario.idealSqft, p.length),
+        paybackYears,
+      };
+    }
+    return summaries;
+  }, [scenarios]);
+
+  // Find the "recommended" scenario (highest total NOI)
+  const recommendedScenario = useMemo(() => {
+    let best: ScenarioKey = "npvOptimized";
+    let bestNoi = -Infinity;
+    for (const key of Object.keys(scenarioSummaries) as ScenarioKey[]) {
+      if (scenarioSummaries[key].totalNoi > bestNoi) {
+        bestNoi = scenarioSummaries[key].totalNoi;
+        best = key;
+      }
+    }
+    return best;
+  }, [scenarioSummaries]);
 
   // Debounced auto-save
   const scheduleSave = useCallback(
@@ -284,7 +314,6 @@ export function ScenarioScorecard({ data: initialData, clientId }: ScenarioScore
     [clientId]
   );
 
-  // Update a single projection value and recalculate derived fields
   function handleProjectionChange(
     scenarioKey: ScenarioKey,
     yearIndex: number,
@@ -297,16 +326,13 @@ export function ScenarioScorecard({ data: initialData, clientId }: ScenarioScore
       const loc = nextLocations[selectedLocationIdx];
       const yr = loc.scenarios[scenarioKey].yearlyProjections[yearIndex];
 
-      // Update the field
       if (field === "revenue") yr.revenue = value;
       else if (field === "leaseCost") yr.leaseCost = value;
       else if (field === "operationalCost") yr.operationalCost = value;
 
-      // Mark source as user
       if (!yr.sources) yr.sources = {};
       yr.sources[field] = "user";
 
-      // Recalculate derived values
       if (yr.leaseCost != null && yr.operationalCost != null) {
         yr.cost = yr.leaseCost + yr.operationalCost;
       }
@@ -318,7 +344,6 @@ export function ScenarioScorecard({ data: initialData, clientId }: ScenarioScore
     });
   }
 
-  // Update scenario params (idealSqft, leaseTerm)
   function handleScenarioParamChange(
     scenarioKey: ScenarioKey,
     param: "idealSqft" | "leaseTerm",
@@ -337,7 +362,6 @@ export function ScenarioScorecard({ data: initialData, clientId }: ScenarioScore
         const oldTerm = scenario.yearlyProjections.length;
 
         if (newTerm > oldTerm) {
-          // Extend: extrapolate from last year using growth rate
           const lastYear = scenario.yearlyProjections[oldTerm - 1];
           const growthRate = loc.assumptions.annualGrowthRate || 0.03;
           for (let i = oldTerm; i < newTerm; i++) {
@@ -371,7 +395,6 @@ export function ScenarioScorecard({ data: initialData, clientId }: ScenarioScore
     });
   }
 
-  // Update assumption values
   function handleAssumptionChange(
     field: "currentSqft" | "marketRentPsf" | "employeeCount" | "annualGrowthRate",
     value: number
@@ -386,7 +409,6 @@ export function ScenarioScorecard({ data: initialData, clientId }: ScenarioScore
       else if (field === "employeeCount") loc.assumptions.employeeCount = value;
       else if (field === "annualGrowthRate") loc.assumptions.annualGrowthRate = value;
 
-      // Track user edit in assumptionSources
       const fieldLabels: Record<string, string> = {
         currentSqft: "Current Sqft",
         marketRentPsf: "Market Rent PSF",
@@ -416,59 +438,9 @@ export function ScenarioScorecard({ data: initialData, clientId }: ScenarioScore
     });
   }
 
-  function toggleScenario(key: ScenarioKey) {
-    setActiveScenarios((prev) => {
-      const next = new Set(prev);
-      if (next.has(key)) {
-        if (next.size > 1) next.delete(key);
-      } else {
-        next.add(key);
-      }
-      return next;
-    });
-  }
-
-  function handleSparklineClick(metric: MetricKey | "cost") {
-    setSelectedMetric((prev) => (prev === metric ? null : metric));
-  }
-
-  // Build focus chart data
-  const focusChartData = useMemo(() => {
-    if (!selectedMetric) return [];
-    const maxYears = Math.max(
-      ...Object.keys(SCENARIO_CONFIG).map((key) => {
-        const scenario = scenarios[key as ScenarioKey];
-        return scenario?.yearlyProjections?.length || 0;
-      })
-    );
-    return Array.from({ length: maxYears }, (_, i) => {
-      const point: Record<string, number | null> = { year: i + 1 };
-      for (const key of Object.keys(SCENARIO_CONFIG) as ScenarioKey[]) {
-        const proj = scenarios[key]?.yearlyProjections?.[i];
-        if (proj) {
-          const fieldKey = selectedMetric === "cost" ? "cost" : selectedMetric;
-          point[key] = proj[fieldKey as keyof typeof proj] as number ?? null;
-          const val = point[key];
-          if (val != null) {
-            point[`${key}_upper`] = val * (1 + bandPct);
-            point[`${key}_lower`] = val * (1 - bandPct);
-          }
-        } else {
-          point[key] = null;
-          point[`${key}_upper`] = null;
-          point[`${key}_lower`] = null;
-        }
-      }
-      return point;
-    });
-  }, [selectedMetric, scenarios, bandPct]);
-
-  const focusMetricLabel =
-    selectedMetric === "cost"
-      ? LEGACY_COST_METRIC.label
-      : selectedMetric
-        ? METRIC_CONFIG[selectedMetric].label
-        : "";
+  const activeKeys = (Object.keys(SCENARIO_CONFIG) as ScenarioKey[]).filter(
+    (k) => activeScenarios.has(k) && scenarios[k]
+  );
 
   return (
     <Card>
@@ -502,7 +474,7 @@ export function ScenarioScorecard({ data: initialData, clientId }: ScenarioScore
           <div className="flex items-center justify-between">
             <div>
               <CardTitle className="text-lg">
-                Scenario Projections
+                Scenario Comparison
                 {isMultiLoc && (
                   <span className="ml-2 text-sm font-normal text-muted-foreground">
                     — {currentLocation.location.name}
@@ -510,12 +482,12 @@ export function ScenarioScorecard({ data: initialData, clientId }: ScenarioScore
                 )}
               </CardTitle>
               <p className="mt-1 flex items-center gap-2 text-sm text-muted-foreground">
-                Click a metric sparkline to compare across scenarios{" "}
+                Click any value to edit
                 <span className="text-xs">({confidence}% confidence)</span>
                 <SaveIndicator status={saveStatus} />
               </p>
             </div>
-            {/* Scenario pills */}
+            {/* Scenario toggles */}
             <div className="flex gap-2">
               {(Object.keys(SCENARIO_CONFIG) as ScenarioKey[]).map((key) => {
                 const cfg = SCENARIO_CONFIG[key];
@@ -523,7 +495,17 @@ export function ScenarioScorecard({ data: initialData, clientId }: ScenarioScore
                 return (
                   <button
                     key={key}
-                    onClick={() => toggleScenario(key)}
+                    onClick={() => {
+                      setActiveScenarios((prev) => {
+                        const next = new Set(prev);
+                        if (next.has(key)) {
+                          if (next.size > 1) next.delete(key);
+                        } else {
+                          next.add(key);
+                        }
+                        return next;
+                      });
+                    }}
                     className={`rounded-full px-3 py-1 text-xs font-medium transition-all ${
                       isActive
                         ? "text-white shadow-sm"
@@ -540,301 +522,260 @@ export function ScenarioScorecard({ data: initialData, clientId }: ScenarioScore
         </div>
       </CardHeader>
 
-      <CardContent>
-        {/* Scorecard grid */}
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-          {(Object.keys(SCENARIO_CONFIG) as ScenarioKey[]).map((key) => {
-            if (!activeScenarios.has(key)) return null;
-            const cfg = SCENARIO_CONFIG[key];
-            const scenario = scenarios[key];
-            if (!scenario) return null;
-
-            const projections = scenario.yearlyProjections;
-            const lastYear = projections[projections.length - 1];
-
-            return (
-              <div
-                key={key}
-                className="rounded-lg border p-4"
-                style={{ borderColor: cfg.color, borderWidth: 2 }}
-              >
-                {/* Card header */}
-                <div className="mb-3 flex items-center gap-2">
-                  <div
-                    className="h-3 w-3 rounded-full"
-                    style={{ backgroundColor: cfg.color }}
-                  />
-                  <span className="text-sm font-semibold">{cfg.label}</span>
-                </div>
-
-                {/* Sparkline rows */}
-                <div className="space-y-1">
-                  {metricKeys.map((metric) => {
-                    const isNoi = metric === "netProfit";
-                    const metricCfg =
-                      metric === "cost"
-                        ? LEGACY_COST_METRIC
-                        : METRIC_CONFIG[metric as MetricKey];
-                    const sparkData = projections.map((p) => {
-                      if (metric === "cost") return p.cost;
-                      return (p[metric as keyof typeof p] as number) ?? 0;
-                    });
-                    const finalValue = lastYear
-                      ? metric === "cost"
-                        ? lastYear.cost
-                        : (lastYear[metric as keyof typeof lastYear] as number) ?? 0
-                      : 0;
-                    const isSelected = selectedMetric === metric;
-                    const isCostType = metric === "leaseCost" || metric === "operationalCost" || metric === "cost";
-
-                    // Source pill on sparkline label
-                    const metricSource =
-                      metric !== "cost" && metric !== "netProfit"
-                        ? projections[0]?.sources?.[metric as EditableMetric]
-                        : undefined;
-
-                    return (
-                      <button
-                        key={metric}
-                        type="button"
-                        onClick={() => handleSparklineClick(metric)}
-                        className={`flex w-full items-center gap-3 rounded px-2 py-1 text-left transition-colors hover:bg-muted/50 ${
-                          isSelected ? "bg-muted/70 ring-1 ring-muted-foreground/20" : ""
-                        }`}
-                      >
-                        <span
-                          className={`flex w-14 shrink-0 items-center gap-1 text-xs ${
-                            isNoi ? "font-bold" : "text-muted-foreground"
-                          } ${isSelected ? "underline decoration-1 underline-offset-2" : ""}`}
-                        >
-                          {metricCfg.label}
-                          {metricSource && (
-                            <span
-                              className={`inline-block h-1.5 w-1.5 rounded-full ${
-                                metricSource === "user"
-                                  ? "bg-gray-400"
-                                  : metricSource === "broker_interview"
-                                    ? "bg-blue-400"
-                                    : metricSource === "research"
-                                      ? "bg-emerald-400"
-                                      : "bg-amber-400"
-                              }`}
-                              title={metricSource}
-                            />
-                          )}
-                        </span>
-                        <div className="min-w-0 flex-1">
-                          <Sparkline data={sparkData} color={metricCfg.color} height={32} />
+      <CardContent className="space-y-6">
+        {/* ── Executive Comparison Table ── */}
+        <div className="overflow-x-auto rounded-lg border">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/30">
+                <TableHead className="min-w-[180px]">Metric</TableHead>
+                {activeKeys.map((key) => {
+                  const cfg = SCENARIO_CONFIG[key];
+                  const isRecommended = key === recommendedScenario;
+                  return (
+                    <TableHead key={key} className="text-center">
+                      <div className="flex items-center justify-end gap-2">
+                        {isRecommended && (
+                          <Badge variant="default" className="gap-1 text-[10px]">
+                            <Trophy className="h-2.5 w-2.5" />
+                            Top
+                          </Badge>
+                        )}
+                        <div className="flex items-center gap-1.5">
+                          <span
+                            className="inline-block h-2.5 w-2.5 rounded-full"
+                            style={{ backgroundColor: cfg.color }}
+                          />
+                          <span className="font-semibold">{cfg.shortLabel}</span>
                         </div>
-                        <span
-                          className={`w-16 shrink-0 text-right text-xs tabular-nums ${
-                            isNoi ? "font-bold" : ""
-                          } ${isCostType ? "text-destructive" : ""}`}
-                        >
-                          {isCostType && finalValue > 0
-                            ? `(${formatDollar(finalValue)})`
-                            : formatDollar(finalValue)}
-                        </span>
-                      </button>
-                    );
-                  })}
-                </div>
+                      </div>
+                    </TableHead>
+                  );
+                })}
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {/* Strategy */}
+              <TableRow>
+                <TableCell className="text-xs font-medium text-muted-foreground">Strategy</TableCell>
+                {activeKeys.map((key) => (
+                  <TableCell key={key} className="text-center text-xs text-muted-foreground">
+                    {SCENARIO_CONFIG[key].optimizes}
+                  </TableCell>
+                ))}
+              </TableRow>
 
-                {/* Card footer — editable sqft & lease term */}
-                <div className="mt-3 flex items-center gap-3 border-t pt-3 text-xs text-muted-foreground">
-                  <span className="flex items-center gap-1">
-                    <Building2 className="h-3 w-3" />
+              {/* Space & Term */}
+              <TableRow className="border-t">
+                <TableCell className="text-sm font-medium">Lease Size</TableCell>
+                {activeKeys.map((key) => (
+                  <TableCell key={key} className="text-center">
                     <InlineEdit
-                      value={scenario.idealSqft}
+                      value={scenarios[key].idealSqft}
                       onCommit={(v) => handleScenarioParamChange(key, "idealSqft", v)}
-                      format={(v) => `${v.toLocaleString()} sqft`}
+                      format={(v) => `${v.toLocaleString()} SF`}
                       parse={(s) => parseInt(s, 10)}
+                      className="font-medium"
                     />
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Clock className="h-3 w-3" />
+                  </TableCell>
+                ))}
+              </TableRow>
+              <TableRow>
+                <TableCell className="text-sm font-medium">Lease Term</TableCell>
+                {activeKeys.map((key) => (
+                  <TableCell key={key} className="text-center">
                     <InlineEdit
-                      value={scenario.leaseTerm}
+                      value={scenarios[key].leaseTerm}
                       onCommit={(v) => handleScenarioParamChange(key, "leaseTerm", v)}
-                      format={(v) => `${v} yr`}
+                      format={(v) => `${v} years`}
                       parse={(s) => parseInt(s, 10)}
+                      className="font-medium"
                     />
-                  </span>
-                  <span className="ml-auto rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium">
-                    {confidence}% conf
-                  </span>
-                </div>
+                  </TableCell>
+                ))}
+              </TableRow>
 
-                {/* Description + reasoning */}
-                <p className="mt-2 text-xs text-muted-foreground">
-                  {scenario.description}
-                </p>
-                {scenario.reasoning && (
-                  <ReasoningText text={scenario.reasoning} className="mt-2" />
-                )}
-              </div>
-            );
-          })}
+              {/* Financial Summary */}
+              <TableRow className="border-t bg-muted/10">
+                <TableCell className="text-sm font-medium">Total Revenue</TableCell>
+                {activeKeys.map((key) => (
+                  <TableCell key={key} className="text-center text-sm font-medium tabular-nums text-green-600 dark:text-green-400">
+                    {formatDollar(scenarioSummaries[key].totalRevenue)}
+                  </TableCell>
+                ))}
+              </TableRow>
+              {hasBreakdown && (
+                <>
+                  <TableRow className="bg-muted/10">
+                    <TableCell className="pl-6 text-sm text-muted-foreground">Lease Cost</TableCell>
+                    {activeKeys.map((key) => (
+                      <TableCell key={key} className="text-center text-sm tabular-nums text-destructive">
+                        ({formatDollar(scenarioSummaries[key].totalLeaseCost)})
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                  <TableRow className="bg-muted/10">
+                    <TableCell className="pl-6 text-sm text-muted-foreground">Operating Expenses</TableCell>
+                    {activeKeys.map((key) => (
+                      <TableCell key={key} className="text-center text-sm tabular-nums text-destructive">
+                        ({formatDollar(scenarioSummaries[key].totalOpex)})
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                </>
+              )}
+              <TableRow className="border-t bg-muted/20">
+                <TableCell className="text-sm font-bold">Total NOI</TableCell>
+                {activeKeys.map((key) => {
+                  const isTop = key === recommendedScenario;
+                  return (
+                    <TableCell key={key} className={`text-center text-sm font-bold tabular-nums ${isTop ? "text-foreground" : ""}`}>
+                      {formatDollar(scenarioSummaries[key].totalNoi)}
+                    </TableCell>
+                  );
+                })}
+              </TableRow>
+
+              {/* Key Ratios */}
+              <TableRow className="border-t">
+                <TableCell className="text-sm font-medium">Avg Annual NOI</TableCell>
+                {activeKeys.map((key) => (
+                  <TableCell key={key} className="text-center text-sm font-medium tabular-nums">
+                    {formatDollar(scenarioSummaries[key].avgAnnualNoi)}
+                  </TableCell>
+                ))}
+              </TableRow>
+              <TableRow>
+                <TableCell className="text-sm font-medium">Year 1 NOI</TableCell>
+                {activeKeys.map((key) => (
+                  <TableCell key={key} className="text-center text-sm tabular-nums">
+                    {formatDollar(scenarioSummaries[key].yr1Noi)}
+                  </TableCell>
+                ))}
+              </TableRow>
+              <TableRow>
+                <TableCell className="text-sm font-medium">Steady-State NOI</TableCell>
+                {activeKeys.map((key) => (
+                  <TableCell key={key} className="text-center text-sm tabular-nums">
+                    {formatDollar(scenarioSummaries[key].steadyStateNoi)}
+                    <span className="ml-1 text-xs text-muted-foreground">/yr</span>
+                  </TableCell>
+                ))}
+              </TableRow>
+              <TableRow>
+                <TableCell className="text-sm font-medium">Cost / SF / Year</TableCell>
+                {activeKeys.map((key) => (
+                  <TableCell key={key} className="text-center text-sm tabular-nums">
+                    {scenarioSummaries[key].costPerSqft}
+                  </TableCell>
+                ))}
+              </TableRow>
+
+              {/* Reasoning toggle */}
+              <TableRow className="border-t">
+                <TableCell className="text-xs font-medium text-muted-foreground">Rationale</TableCell>
+                {activeKeys.map((key) => (
+                  <TableCell key={key} className="text-center">
+                    <button
+                      type="button"
+                      onClick={() => setExpandedReasoning((prev) => (prev === key ? null : key))}
+                      className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                    >
+                      {expandedReasoning === key ? (
+                        <>Hide <ChevronUp className="h-3 w-3" /></>
+                      ) : (
+                        <>Show <ChevronDown className="h-3 w-3" /></>
+                      )}
+                    </button>
+                  </TableCell>
+                ))}
+              </TableRow>
+            </TableBody>
+          </Table>
         </div>
 
-        {/* Focus chart */}
-        {selectedMetric && focusChartData.length > 0 && (
-          <div className="mt-6 rounded-lg border p-4">
-            <div className="mb-3 flex items-center justify-between">
-              <h3 className="text-sm font-semibold">
-                {focusMetricLabel} — Scenario Comparison
-              </h3>
-              <button
-                type="button"
-                onClick={() => setSelectedMetric(null)}
-                className="flex items-center gap-1 rounded px-2 py-1 text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
-              >
-                <X className="h-3 w-3" />
-                Clear
-              </button>
+        {/* Reasoning expansion */}
+        {expandedReasoning && scenarios[expandedReasoning] && (
+          <div className="rounded-lg border p-4">
+            <div className="mb-2 flex items-center gap-2">
+              <span
+                className="inline-block h-2.5 w-2.5 rounded-full"
+                style={{ backgroundColor: SCENARIO_CONFIG[expandedReasoning].color }}
+              />
+              <h4 className="text-sm font-semibold">
+                {SCENARIO_CONFIG[expandedReasoning].label} — Rationale
+              </h4>
             </div>
-            <ResponsiveContainer width="100%" height={300}>
-              <ComposedChart
-                data={focusChartData}
-                margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-              >
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                <XAxis
-                  dataKey="year"
-                  tickFormatter={(v) => `Yr ${v}`}
-                  tick={{ fontSize: 12 }}
-                />
-                <YAxis
-                  tickFormatter={formatDollar}
-                  tick={{ fontSize: 12 }}
-                  width={70}
-                />
-                <Tooltip content={<FocusTooltip activeScenarios={activeScenarios} metricLabel={focusMetricLabel} />} />
-                {(Object.keys(SCENARIO_CONFIG) as ScenarioKey[]).map((key) => {
-                  if (!activeScenarios.has(key)) return null;
-                  const cfg = SCENARIO_CONFIG[key];
-                  return (
-                    <Area
-                      key={`${key}_band`}
-                      dataKey={`${key}_upper`}
-                      stroke="none"
-                      fill={cfg.color}
-                      fillOpacity={0.08}
-                      connectNulls={false}
-                      isAnimationActive={false}
-                    />
-                  );
-                })}
-                {(Object.keys(SCENARIO_CONFIG) as ScenarioKey[]).map((key) => {
-                  if (!activeScenarios.has(key)) return null;
-                  return (
-                    <Area
-                      key={`${key}_lower`}
-                      dataKey={`${key}_lower`}
-                      stroke="none"
-                      fill="#ffffff"
-                      fillOpacity={1}
-                      connectNulls={false}
-                      isAnimationActive={false}
-                    />
-                  );
-                })}
-                {(Object.keys(SCENARIO_CONFIG) as ScenarioKey[]).map((key) => {
-                  if (!activeScenarios.has(key)) return null;
-                  const cfg = SCENARIO_CONFIG[key];
-                  return (
-                    <Line
-                      key={key}
-                      type="monotone"
-                      dataKey={key}
-                      stroke={cfg.color}
-                      strokeWidth={2.5}
-                      dot={{ r: 4, fill: cfg.color }}
-                      connectNulls={false}
-                      name={cfg.label}
-                    />
-                  );
-                })}
-              </ComposedChart>
-            </ResponsiveContainer>
+            <p className="text-sm text-muted-foreground">
+              {scenarios[expandedReasoning].description}
+            </p>
+            {scenarios[expandedReasoning].reasoning && (
+              <p className="mt-2 text-sm text-muted-foreground">
+                {scenarios[expandedReasoning].reasoning}
+              </p>
+            )}
           </div>
         )}
 
-        {/* Financial table — now with editing */}
+        {/* ── Year-by-Year Financial Detail (always visible) ── */}
         <FinancialTable
           scenarios={scenarios}
           activeScenarios={activeScenarios}
           hasBreakdown={hasBreakdown}
           onProjectionChange={handleProjectionChange}
+          clientId={clientId}
         />
 
-        {/* Assumptions panel */}
+        {/* ── Assumptions ── */}
         <AssumptionsPanel
           assumptions={assumptions}
           onAssumptionChange={handleAssumptionChange}
+          clientId={clientId}
         />
       </CardContent>
     </Card>
   );
 }
 
-// --- Focus chart tooltip ---
-function FocusTooltip({
-  active,
-  payload,
-  label,
-  activeScenarios,
-  metricLabel,
-}: {
-  active?: boolean;
-  payload?: Array<{ dataKey: string; value: number; color: string }>;
-  label?: number;
-  activeScenarios: Set<ScenarioKey>;
-  metricLabel: string;
-}) {
-  if (!active || !payload?.length) return null;
+// --- Source pill that links to the data page ---
+const SOURCE_LINKS: Record<string, string> = {
+  broker_interview: "broker-interview",
+  research: "research",
+  client_interview: "client-interview",
+};
 
-  return (
-    <div className="rounded-lg border bg-card p-3 shadow-lg">
-      <p className="mb-2 text-sm font-semibold">
-        Year {label} — {metricLabel}
-      </p>
-      <div className="space-y-1">
-        {(Object.keys(SCENARIO_CONFIG) as ScenarioKey[]).map((key) => {
-          if (!activeScenarios.has(key)) return null;
-          const cfg = SCENARIO_CONFIG[key];
-          const entry = payload.find((p) => p.dataKey === key);
-          if (!entry || entry.value == null) return null;
-          return (
-            <div key={key} className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-1.5">
-                <div
-                  className="h-2.5 w-2.5 rounded-full"
-                  style={{ backgroundColor: cfg.color }}
-                />
-                <span className="text-xs text-muted-foreground">
-                  {cfg.shortLabel}
-                </span>
-              </div>
-              <span className="text-xs font-medium">{formatDollar(entry.value)}</span>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
+function LinkedOriginPill({
+  source,
+  clientId,
+  className,
+}: {
+  source: string;
+  clientId: string;
+  className?: string;
+}) {
+  const route = SOURCE_LINKS[source];
+  if (route) {
+    return (
+      <Link href={`/clients/${clientId}/${route}`}>
+        <OriginPill source={source} className={`cursor-pointer hover:opacity-80 ${className || ""}`} />
+      </Link>
+    );
+  }
+  return <OriginPill source={source} className={className} />;
 }
 
 // --- Assumptions Panel ---
 function AssumptionsPanel({
   assumptions,
   onAssumptionChange,
+  clientId,
 }: {
   assumptions: ScenarioProjectionData["assumptions"];
   onAssumptionChange: (
     field: "currentSqft" | "marketRentPsf" | "employeeCount" | "annualGrowthRate",
     value: number
   ) => void;
+  clientId: string;
 }) {
   const hasReasoning =
     assumptions.currentSqftReasoning ||
@@ -847,7 +788,6 @@ function AssumptionsPanel({
 
   if (!hasReasoning && !hasSources) return null;
 
-  // Find source for a given assumption label
   function getSource(label: string): string | undefined {
     return assumptions.assumptionSources?.find(
       (s) => s.assumption.toLowerCase().includes(label.toLowerCase())
@@ -902,14 +842,16 @@ function AssumptionsPanel({
   ];
 
   return (
-    <CollapsibleSection title="Assumptions & Sources" className="mt-4">
+    <CollapsibleSection title="Assumptions & Sources" defaultOpen className="mt-0">
       <div className="space-y-2">
         {rows.map((row) => (
           <div key={row.label} className="rounded border px-3 py-2">
             <div className="flex items-center justify-between">
               <span className="flex items-center gap-1.5 text-xs font-medium">
                 {row.label}
-                {row.source && <OriginPill source={row.source} />}
+                {row.source && (
+                  <LinkedOriginPill source={row.source} clientId={clientId} />
+                )}
               </span>
               {row.value != null ? (
                 <InlineEdit
@@ -941,7 +883,7 @@ function AssumptionsPanel({
                 key={i}
                 className="flex items-start gap-2 text-[11px] text-muted-foreground"
               >
-                <OriginPill source={src.source} className="mt-0.5 shrink-0" />
+                <LinkedOriginPill source={src.source} clientId={clientId} className="mt-0.5 shrink-0" />
                 <span>
                   <span className="font-medium">{src.assumption}:</span>{" "}
                   {src.detail}

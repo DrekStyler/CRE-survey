@@ -10,8 +10,15 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import Link from "next/link";
 import { CollapsibleSection, OriginPill } from "@/components/ui/citation-badge";
 import type { ScenarioDetail, YearProjection } from "@/types";
+
+const SOURCE_LINKS: Record<string, string> = {
+  broker_interview: "broker-interview",
+  research: "research",
+  client_interview: "client-interview",
+};
 
 type ScenarioKey = "npvOptimized" | "costOptimized" | "ebitdaOptimized";
 type EditableMetric = "revenue" | "leaseCost" | "operationalCost";
@@ -110,6 +117,7 @@ interface FinancialTableProps {
   };
   activeScenarios: Set<ScenarioKey>;
   hasBreakdown: boolean;
+  clientId?: string;
   onProjectionChange?: (
     scenarioKey: ScenarioKey,
     yearIndex: number,
@@ -122,6 +130,7 @@ export function FinancialTable({
   scenarios,
   activeScenarios,
   hasBreakdown,
+  clientId,
   onProjectionChange,
 }: FinancialTableProps) {
   const [expandedScenarios, setExpandedScenarios] = useState<Set<ScenarioKey>>(
@@ -151,7 +160,7 @@ export function FinancialTable({
   const yearCols = Array.from({ length: maxYears }, (_, i) => i + 1);
 
   return (
-    <CollapsibleSection title="Financial Detail" className="mt-4">
+    <CollapsibleSection title="Year-by-Year Financial Detail" defaultOpen className="mt-0">
       <div className="relative overflow-x-auto rounded border">
         <Table>
           <TableHeader>
@@ -200,6 +209,7 @@ export function FinancialTable({
                   hasBreakdown={hasBreakdown}
                   onToggle={() => toggleExpand(key)}
                   onProjectionChange={onProjectionChange}
+                  clientId={clientId}
                 />
               );
             })}
@@ -220,6 +230,7 @@ function ScenarioRows({
   hasBreakdown,
   onToggle,
   onProjectionChange,
+  clientId,
 }: {
   scenarioKey: ScenarioKey;
   cfg: { label: string; color: string; dot: string };
@@ -235,6 +246,7 @@ function ScenarioRows({
     field: EditableMetric,
     value: number
   ) => void;
+  clientId?: string;
 }) {
   const ChevronIcon = isExpanded ? ChevronDown : ChevronRight;
 
@@ -281,6 +293,7 @@ function ScenarioRows({
             colorClass="text-green-600 dark:text-green-400"
             isCost={false}
             onProjectionChange={onProjectionChange}
+            clientId={clientId}
           />
 
           {hasBreakdown ? (
@@ -295,6 +308,7 @@ function ScenarioRows({
                 colorClass="text-destructive"
                 isCost={true}
                 onProjectionChange={onProjectionChange}
+                clientId={clientId}
               />
               <EditableSubRow
                 label="Operating Expenses"
@@ -306,6 +320,7 @@ function ScenarioRows({
                 colorClass="text-destructive"
                 isCost={true}
                 onProjectionChange={onProjectionChange}
+                clientId={clientId}
               />
             </>
           ) : (
@@ -338,6 +353,7 @@ function EditableSubRow({
   colorClass,
   isCost,
   onProjectionChange,
+  clientId,
 }: {
   label: string;
   metric: EditableMetric;
@@ -353,9 +369,11 @@ function EditableSubRow({
     field: EditableMetric,
     value: number
   ) => void;
+  clientId?: string;
 }) {
   // Use first year's source as representative for the row label
   const representativeSource = getMetricSource(projections[0], metric);
+  const route = representativeSource ? SOURCE_LINKS[representativeSource] : undefined;
 
   return (
     <TableRow className="bg-muted/20">
@@ -363,7 +381,13 @@ function EditableSubRow({
         <span className="flex items-center gap-1.5">
           {label}
           {representativeSource && (
-            <OriginPill source={representativeSource} className="ml-1" />
+            route && clientId ? (
+              <Link href={`/clients/${clientId}/${route}`}>
+                <OriginPill source={representativeSource} className="ml-1 cursor-pointer hover:opacity-80" />
+              </Link>
+            ) : (
+              <OriginPill source={representativeSource} className="ml-1" />
+            )
           )}
         </span>
       </TableCell>
