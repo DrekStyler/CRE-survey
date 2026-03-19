@@ -525,16 +525,22 @@ export function ScenarioScorecard({ data: initialData, clientId }: ScenarioScore
       <CardContent className="space-y-6">
         {/* ── Executive Comparison Table ── */}
         <div className="overflow-x-auto rounded-lg border">
-          <Table>
+          <Table className="table-fixed">
+            <colgroup>
+              <col className="w-[160px]" />
+              {activeKeys.map((key) => (
+                <col key={key} />
+              ))}
+            </colgroup>
             <TableHeader>
               <TableRow className="bg-muted/30">
-                <TableHead className="min-w-[180px]">Metric</TableHead>
+                <TableHead className="w-[160px]">Metric</TableHead>
                 {activeKeys.map((key) => {
                   const cfg = SCENARIO_CONFIG[key];
                   const isRecommended = key === recommendedScenario;
                   return (
                     <TableHead key={key} className="text-center">
-                      <div className="flex items-center justify-end gap-2">
+                      <div className="flex items-center justify-center gap-2">
                         {isRecommended && (
                           <Badge variant="default" className="gap-1 text-[10px]">
                             <Trophy className="h-2.5 w-2.5" />
