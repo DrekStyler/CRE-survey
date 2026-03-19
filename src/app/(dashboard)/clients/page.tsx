@@ -1,5 +1,7 @@
 import Link from "next/link";
 import { getClients } from "./actions";
+import { seedDemoClientIfNeeded } from "@/lib/demo/seed-demo-client";
+import { auth } from "@clerk/nextjs/server";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -13,6 +15,10 @@ import { Badge } from "@/components/ui/badge";
 import { Plus } from "lucide-react";
 
 export default async function ClientsPage() {
+  const { userId } = await auth();
+  if (userId) {
+    await seedDemoClientIfNeeded(userId);
+  }
   const clientList = await getClients();
 
   return (
